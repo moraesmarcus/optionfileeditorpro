@@ -30,6 +30,8 @@ Depois acesse `http://localhost:4173`.
 - Permite selecionar exatamente 25 jogadores do Transfermarkt.
 - Monta a correspondencia dos 25 selecionados com os 25 slots do arquivo PES.
 - Le a posicao registrada do jogador no arquivo PES e mostra codigo + descricao, como `LWF - Ponta Esquerda`.
+- Prepara uma tela de gravacao com campos editaveis de equipe, tecnico e jogadores.
+- Gera uma copia editada do `.bin` gravando nome, nome na camisa, posicao, pe forte e numero da camisa dos jogadores.
 - Valida a nacionalidade lida no Transfermarkt contra a lista de 220 nacionalidades do editor PES.
 - Mostra alertas quando algum campo nao puder ser lido.
 

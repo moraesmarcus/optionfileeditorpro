@@ -275,6 +275,25 @@
       line-height: 1.4;
     }
 
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(180px, 1fr));
+      gap: 10px 14px;
+      margin-bottom: 14px;
+    }
+
+    .form-grid input,
+    .form-grid select,
+    #writePanel table input,
+    #writePanel table select {
+      min-height: 32px;
+      width: 100%;
+      border: 1px solid #bdc8d6;
+      border-radius: 6px;
+      padding: 6px 8px;
+      background: #ffffff;
+    }
+
     tr.group-starter td {
       background: #e8f2ff;
     }
@@ -357,6 +376,7 @@
           <button class="tab active" data-panel="playersPanel" type="button">Jogadores</button>
           <button class="tab" data-panel="selectionPanel" type="button">Selecionar 25</button>
           <button class="tab" data-panel="mappingPanel" type="button">Correspondência</button>
+          <button class="tab" data-panel="writePanel" type="button">Gravação</button>
           <button class="tab" data-panel="binPanel" type="button">Arquivo PES</button>
           <button class="tab" data-panel="eventsPanel" type="button">Jogo</button>
           <button class="tab" data-panel="issuesPanel" type="button">Alertas</button>
@@ -426,11 +446,62 @@
                   <th>Slot PES</th>
                   <th>Atual no arquivo</th>
                   <th>Posição PES</th>
+                  <th>Pé PES</th>
                   <th>Novo jogador Transfermarkt</th>
                   <th>Dados que vieram do site</th>
                 </tr>
               </thead>
               <tbody id="mappingBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="writePanel" class="panel">
+          <div class="form-grid">
+            <div>
+              <label for="teamNameInput">Nome da equipe</label>
+              <input id="teamNameInput" data-write-team="teamName" maxlength="60" type="text">
+            </div>
+            <div>
+              <label for="teamShortNameInput">Abreviação da equipe</label>
+              <input id="teamShortNameInput" data-write-team="teamShortName" maxlength="3" type="text">
+            </div>
+            <div>
+              <label for="teamCountrySelect">País da equipe</label>
+              <select id="teamCountrySelect" data-write-team="teamCountry"></select>
+            </div>
+            <div>
+              <label for="stadiumNameInput">Nome do estádio</label>
+              <input id="stadiumNameInput" data-write-team="stadiumName" maxlength="16" type="text">
+            </div>
+            <div>
+              <label for="managerNameInput">Nome do técnico</label>
+              <input id="managerNameInput" data-write-team="managerName" maxlength="45" type="text">
+            </div>
+            <div>
+              <label for="managerCountrySelect">País do técnico</label>
+              <select id="managerCountrySelect" data-write-team="managerCountry"></select>
+            </div>
+          </div>
+          <div class="toolbar">
+            <button id="saveEditedFileButton" type="button">Gerar arquivo editado</button>
+            <span id="writeStatus" class="muted">Monte a correspondência antes de gravar.</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Slot</th>
+                  <th>Nome do jogador</th>
+                  <th>Nome na camisa</th>
+                  <th>Posição</th>
+                  <th>Pé</th>
+                  <th>Idade</th>
+                  <th>País</th>
+                  <th>Camisa</th>
+                </tr>
+              </thead>
+              <tbody id="writePlayersBody"></tbody>
             </table>
           </div>
         </div>
@@ -443,7 +514,9 @@
                   <th>Slot</th>
                   <th>Nome principal</th>
                   <th>Nome curto</th>
+                  <th>Camisa</th>
                   <th>Posição PES</th>
+                  <th>Pé PES</th>
                   <th>ID interno</th>
                   <th>Offset</th>
                 </tr>

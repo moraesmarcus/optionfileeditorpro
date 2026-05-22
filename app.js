@@ -1,12 +1,18 @@
 const state = {
   transfermarktPlayers: [],
   binPlayers: [],
+  binBytes: null,
+  binFileName: "Editado.bin",
   events: [],
   issues: [],
   clubPages: [],
   staff: [],
   selectedPlayerKeys: [],
   mappings: [],
+  writeDraft: {
+    team: {},
+    players: {},
+  },
 };
 
 const elements = {
@@ -26,6 +32,15 @@ const elements = {
   playersBody: document.querySelector("#playersBody"),
   selectionBody: document.querySelector("#selectionBody"),
   mappingBody: document.querySelector("#mappingBody"),
+  writePlayersBody: document.querySelector("#writePlayersBody"),
+  teamNameInput: document.querySelector("#teamNameInput"),
+  teamShortNameInput: document.querySelector("#teamShortNameInput"),
+  stadiumNameInput: document.querySelector("#stadiumNameInput"),
+  teamCountrySelect: document.querySelector("#teamCountrySelect"),
+  managerNameInput: document.querySelector("#managerNameInput"),
+  managerCountrySelect: document.querySelector("#managerCountrySelect"),
+  writeStatus: document.querySelector("#writeStatus"),
+  saveEditedFileButton: document.querySelector("#saveEditedFileButton"),
   binBody: document.querySelector("#binBody"),
   eventsBody: document.querySelector("#eventsBody"),
   issuesBody: document.querySelector("#issuesBody"),
@@ -41,7 +56,21 @@ const elements = {
 const PES_PLAYER_START = 0x850;
 const PES_PLAYER_SIZE = 0xbc;
 const PES_PLAYER_COUNT = 25;
+const PES_SHIRT_NUMBERS_OFFSET = 0x30c;
 const TRANSFERMARKT_BASE_URL = "https://www.transfermarkt.com.br";
+const FIELD_LIMITS = {
+  teamName: 60,
+  teamShortName: 3,
+  stadiumName: 16,
+  managerName: 45,
+  playerName: 45,
+  playerShirtName: 18,
+};
+const STRONG_FOOT_BIT = 147;
+const STRONG_FOOT_MAP = {
+  L: "Esquerdo",
+  R: "Direito",
+};
 const PES_POSITION_MAP = {
   0: { code: "GK", description: "Goleiro" },
   1: { code: "CB", description: "Zagueiro" },
@@ -379,21 +408,17 @@ function getNationalityValidation(player) {
     return { label: "Nao lida", warning: true };
   }
 
-  const mapped = nationalities.map((nationality) => ({
-    original: nationality,
-    pesName: getPesNationalityName(nationality),
-  }));
-  const missing = mapped.filter((item) => !item.pesName);
-
-  if (missing.length) {
+  const firstNationality = nationalities[0];
+  const pesName = getPesNationalityName(firstNationality);
+  if (!pesName) {
     return {
-      label: `Fora da lista: ${missing.map((item) => item.original).join(", ")}`,
+      label: `Fora da lista: ${firstNationality}`,
       warning: true,
     };
   }
 
   return {
-    label: mapped.map((item) => item.pesName).join(", "),
+    label: nationalities.length > 1 ? `${pesName} (1a nacionalidade)` : pesName,
     warning: false,
   };
 }
@@ -449,6 +474,10 @@ function addIssue(field, reason, source) {
   state.issues.push({ field, reason, source });
 }
 
+function cleanPlayerName(value) {
+  return cleanText(value).replace(/^(?:\d+[\s.)-]+)+/, "").trim();
+}
+
 function getTrainerIdFromLink(link) {
   const match = (link || "").match(/\/trainer\/(\d+)/);
   return match ? match[1] : "";
@@ -476,6 +505,13 @@ function upsertStaff(member) {
 }
 
 function upsertPlayer(player) {
+  if (player.name) {
+    player.name = cleanPlayerName(player.name);
+  }
+  if (player.fullName) {
+    player.fullName = cleanPlayerName(player.fullName);
+  }
+
   if (player.profileUrl) {
     player.profileUrl = absoluteTransfermarktUrl(player.profileUrl);
   }
@@ -663,7 +699,10 @@ function parseMatchPage(html, sourceLabel) {
   const title = cleanText(doc.querySelector("meta[property='og:title']")?.content || doc.title);
   state.clubPages.push({ type: "Jogo", name: title, source: sourceLabel });
 
-  const teamBlocks = [...doc.querySelectorAll(".aufstellung-box")];
+  const tacticalBox = [...doc.querySelectorAll(".box")].find((box) => /Sistema/i.test(cleanText(box.querySelector(".content-box-headline")?.textContent)) && box.querySelector(".formation-player-container"));
+  const teamBlocks = tacticalBox
+    ? [...tacticalBox.children].filter((child) => child.classList.contains("large-6") && child.classList.contains("columns"))
+    : [...doc.querySelectorAll(".aufstellung-box")];
   if (!teamBlocks.length) {
     addIssue("Escalação", "Nao encontrei os blocos de escalacao da partida.", sourceLabel);
   }
@@ -702,7 +741,7 @@ function parseMatchPage(html, sourceLabel) {
       }
     });
 
-    block.querySelectorAll(".bench-table__tr").forEach((row) => {
+    block.querySelectorAll("table.ersatzbank tr").forEach((row) => {
       const trainerLink = row.querySelector("a[href*='/profil/trainer/']");
       if (trainerLink) {
         const name = cleanText(trainerLink.textContent || trainerLink.getAttribute("title"));
@@ -725,7 +764,7 @@ function parseMatchPage(html, sourceLabel) {
       }
 
       const cells = [...row.querySelectorAll("td")];
-      const shirtNumber = cleanText(cells[0]?.textContent);
+      const shirtNumber = cleanText(row.querySelector(".tm-shirt-number--small")?.textContent || cells[0]?.textContent);
       const name = cleanText(playerLink.textContent);
       const profileUrl = playerLink.getAttribute("href") || "";
       const position = cleanText(cells[cells.length - 1]?.textContent);
@@ -776,6 +815,7 @@ function parseTransfermarktHtml(html, sourceLabel) {
 
 function parsePesBin(arrayBuffer) {
   const bytes = new Uint8Array(arrayBuffer);
+  state.binBytes = new Uint8Array(bytes);
   state.binPlayers = [];
 
   if (bytes.length < PES_PLAYER_START + PES_PLAYER_SIZE) {
@@ -794,13 +834,17 @@ function parsePesBin(arrayBuffer) {
     const shirtName = readAscii(bytes, base + 0x45, 0x13);
     const internalId = readUint32(bytes, base + 0x58);
     const position = readPesPosition(bytes, base);
+    const strongFoot = readPesStrongFoot(bytes, base);
+    const shirtNumber = readPesShirtNumber(bytes, index);
 
     if (name || shirtName || internalId) {
       state.binPlayers.push({
         slot: index + 1,
         name,
         shirtName,
+        shirtNumber,
         position,
+        strongFoot,
         internalId,
         offset: `0x${base.toString(16).toUpperCase()}`,
       });
@@ -844,6 +888,22 @@ function readPesPosition(bytes, base) {
   };
 }
 
+function readPesStrongFoot(bytes, base) {
+  const value = readBitField(bytes, base, STRONG_FOOT_BIT, 1);
+  const code = value ? "L" : "R";
+  return {
+    code,
+    value,
+    description: STRONG_FOOT_MAP[code],
+    label: `${code} - ${STRONG_FOOT_MAP[code]}`,
+  };
+}
+
+function readPesShirtNumber(bytes, index) {
+  const offset = PES_SHIRT_NUMBERS_OFFSET + index;
+  return offset < bytes.length ? String(bytes[offset] || "") : "";
+}
+
 function readBitField(bytes, base, bitStart, bitLength) {
   let value = 0;
 
@@ -855,6 +915,129 @@ function readBitField(bytes, base, bitStart, bitLength) {
   }
 
   return value;
+}
+
+function writeBitField(bytes, base, bitStart, bitLength, value) {
+  for (let index = 0; index < bitLength; index += 1) {
+    const absoluteBit = bitStart + index;
+    const byteIndex = base + Math.floor(absoluteBit / 8);
+    const mask = 1 << (absoluteBit % 8);
+    if ((value >> index) & 1) {
+      bytes[byteIndex] |= mask;
+    } else {
+      bytes[byteIndex] &= ~mask;
+    }
+  }
+}
+
+function writeAscii(bytes, start, length, value) {
+  const normalized = toPesUpper(value).slice(0, length - 1);
+  bytes.fill(0, start, start + length);
+  for (let index = 0; index < normalized.length; index += 1) {
+    bytes[start + index] = normalized.charCodeAt(index) & 0xff;
+  }
+}
+
+function normalizeEditableText(value, { trim = true } = {}) {
+  const normalized = decodeHtmlText(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9 .'/-]/g, "")
+    .replace(/\s+/g, " ");
+
+  return trim ? normalized.trim() : normalized;
+}
+
+function toPesUpper(value) {
+  return normalizeEditableText(value).toUpperCase();
+}
+
+function toPesUpperInput(value, limit) {
+  return normalizeEditableText(value, { trim: false }).toUpperCase().slice(0, limit);
+}
+
+function fitText(value, limit) {
+  const normalized = toPesUpper(value);
+  if (normalized.length <= limit) {
+    return normalized;
+  }
+  return abbreviateName(normalized, limit);
+}
+
+function abbreviateName(value, limit) {
+  const parts = toPesUpper(value).split(" ").filter(Boolean);
+  if (!parts.length) {
+    return "";
+  }
+  if (parts.length === 1) {
+    return parts[0].slice(0, limit);
+  }
+
+  const last = parts[parts.length - 1];
+  const initials = parts.slice(0, -1).map((part) => `${part[0]}.`).join(" ");
+  const abbreviated = `${initials} ${last}`.trim();
+  if (abbreviated.length <= limit) {
+    return abbreviated;
+  }
+
+  const firstInitial = `${parts[0][0]}.`;
+  const remaining = Math.max(0, limit - firstInitial.length - 1);
+  return `${firstInitial} ${last.slice(0, remaining)}`.trim();
+}
+
+function formatPesPlayerName(value, limit) {
+  return abbreviateName(cleanPlayerName(value), limit);
+}
+
+function getShirtNumberValue(value) {
+  const numericValue = Number.parseInt(String(value ?? "").replace(/\D/g, ""), 10);
+  if (!Number.isFinite(numericValue)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(99, numericValue));
+}
+
+function getFirstPesNationality(nationalities = []) {
+  return getPesNationalityName(nationalities[0] || "");
+}
+
+function getCountryOptions(selectedValue) {
+  const selected = normalizeCountryName(selectedValue);
+  return [`<option value="">Selecione</option>`, ...PES_NATIONALITIES.map((country) => {
+    const normalized = normalizeCountryName(country);
+    const isSelected = normalized === selected ? "selected" : "";
+    return `<option value="${escapeHtml(country)}" ${isSelected}>${escapeHtml(country)}</option>`;
+  })].join("");
+}
+
+function getPositionOptions(selectedCode) {
+  return Object.values(PES_POSITION_MAP).map((position) => {
+    const isSelected = position.code === selectedCode ? "selected" : "";
+    return `<option value="${escapeHtml(position.code)}" ${isSelected}>${escapeHtml(position.code)}</option>`;
+  }).join("");
+}
+
+function getPositionValue(code) {
+  const found = Object.entries(PES_POSITION_MAP).find(([, position]) => position.code === code);
+  return found ? Number(found[0]) : 0;
+}
+
+function normalizeFootCode(value) {
+  const normalized = normalizePositionText(value);
+  if (/left|esquer|canhot/.test(normalized)) {
+    return "L";
+  }
+  if (/right|direit|destro/.test(normalized)) {
+    return "R";
+  }
+  return "";
+}
+
+function getFootOptions(selectedCode) {
+  return Object.entries(STRONG_FOOT_MAP).map(([code, label]) => {
+    const isSelected = code === selectedCode ? "selected" : "";
+    return `<option value="${escapeHtml(code)}" ${isSelected}>${escapeHtml(label)}</option>`;
+  }).join("");
 }
 
 function getSelectedPlayers() {
@@ -888,19 +1071,19 @@ function getSlotGroupClass(slot) {
 function getTransfermarktPesPosition(player) {
   const sourcePosition = normalizePositionText(player.position || player.detailedPosition || "");
   const positionMap = [
-    [/goleiro|goalkeeper/, "GK"],
-    [/zagueiro|defensor.*zagueiro|centre.?back|center.?back/, "CB"],
-    [/lateral esquerdo|left.?back/, "LB"],
-    [/lateral direito|right.?back/, "RB"],
-    [/volante|meio campo defensivo|defensive midfield/, "DMF"],
+    [/^gol$|goleiro|goalkeeper/, "GK"],
+    [/^zag$|zagueiro|defensor.*zagueiro|centre.?back|center.?back/, "CB"],
+    [/^le$|lateral esquerdo|left.?back/, "LB"],
+    [/^ld$|lateral direito|right.?back/, "RB"],
+    [/^vol$|volante|meio campo defensivo|defensive midfield/, "DMF"],
     [/meio campo central|meia central|central midfield|meio campo$/, "CMF"],
-    [/meia esquerda|left midfield/, "LM"],
+    [/^mei$|meia esquerda|left midfield/, "LM"],
     [/meia direita|right midfield/, "RM"],
     [/armador|meia ofensivo|attacking midfield/, "AMF"],
-    [/ponta esquerda|left winger/, "LWF"],
-    [/ponta direita|right winger/, "RWF"],
+    [/^pe$|ponta esquerda|left winger/, "LWF"],
+    [/^pd$|ponta direita|right winger/, "RWF"],
     [/segundo atacante|second striker/, "SS"],
-    [/centroavante|atacante|centre.?forward|center.?forward/, "CF"],
+    [/^ca$|centroavante|atacante|centre.?forward|center.?forward/, "CF"],
   ];
 
   const match = positionMap.find(([pattern]) => pattern.test(sourcePosition));
@@ -942,6 +1125,42 @@ function bindDynamicControls() {
       render();
     });
   });
+
+  document.querySelectorAll("[data-write-team]").forEach((control) => {
+    control.addEventListener("input", () => {
+      const limit = Number(control.getAttribute("maxlength")) || 0;
+      const value = control.tagName === "INPUT" ? toPesUpperInput(control.value, limit || control.value.length) : control.value;
+      if (control.tagName === "INPUT" && control.value !== value) {
+        control.value = value;
+      }
+      state.writeDraft.team[control.dataset.writeTeam] = value;
+    });
+    control.addEventListener("change", () => {
+      state.writeDraft.team[control.dataset.writeTeam] = control.tagName === "INPUT" ? toPesUpper(control.value) : control.value;
+    });
+  });
+
+  document.querySelectorAll("[data-write-player]").forEach((control) => {
+    control.addEventListener("input", () => {
+      const slot = control.dataset.writePlayer;
+      const limit = Number(control.getAttribute("maxlength")) || 0;
+      const value = control.tagName === "INPUT" && control.type !== "number" ? toPesUpperInput(control.value, limit || control.value.length) : control.value;
+      if (control.tagName === "INPUT" && control.type !== "number" && control.value !== value) {
+        control.value = value;
+      }
+      state.writeDraft.players[slot] = {
+        ...(state.writeDraft.players[slot] || {}),
+        [control.dataset.writeField]: value,
+      };
+    });
+    control.addEventListener("change", () => {
+      const slot = control.dataset.writePlayer;
+      state.writeDraft.players[slot] = {
+        ...(state.writeDraft.players[slot] || {}),
+        [control.dataset.writeField]: control.tagName === "INPUT" && control.type !== "number" ? toPesUpper(control.value) : control.value,
+      };
+    });
+  });
 }
 
 function setMapping(slot, playerKey) {
@@ -973,6 +1192,131 @@ function mapByOrder() {
     slot: binPlayer.slot,
     playerKey: getPlayerKey(selectedPlayers[index] || {}),
   }));
+}
+
+function getMappedPlayerForSlot(slot) {
+  const mapping = state.mappings.find((item) => item.slot === slot);
+  if (!mapping?.playerKey) {
+    return null;
+  }
+  return state.transfermarktPlayers.find((player) => getPlayerKey(player) === mapping.playerKey) || null;
+}
+
+function getWritePlayerDefaults(binPlayer) {
+  const mappedPlayer = getMappedPlayerForSlot(binPlayer.slot);
+  const sourceName = mappedPlayer?.name || binPlayer.name || "";
+  const formattedName = formatPesPlayerName(sourceName, FIELD_LIMITS.playerName);
+  return {
+    name: formattedName,
+    shirtName: formatPesPlayerName(formattedName, FIELD_LIMITS.playerShirtName),
+    position: getTransfermarktPesPosition(mappedPlayer || {}) || binPlayer.position.code || "GK",
+    foot: normalizeFootCode(mappedPlayer?.foot || "") || binPlayer.strongFoot?.code || "R",
+    age: mappedPlayer?.age || "",
+    country: getFirstPesNationality(mappedPlayer?.nationalities || []),
+    shirtNumber: mappedPlayer?.shirtNumber || binPlayer.shirtNumber || "",
+  };
+}
+
+function getWritePlayerValue(slot, field, fallback) {
+  return state.writeDraft.players[slot]?.[field] ?? fallback ?? "";
+}
+
+function getPreferredTeamName() {
+  const byMatch = state.transfermarktPlayers.find((player) => player.teamName)?.teamName;
+  const bySquad = state.clubPages.find((page) => page.type === "Plantel")?.name;
+  return byMatch || bySquad || "";
+}
+
+function getPreferredManager() {
+  return state.staff[0] || {};
+}
+
+function renderWritePanel() {
+  const manager = getPreferredManager();
+  const teamName = state.writeDraft.team.teamName ?? fitText(getPreferredTeamName(), FIELD_LIMITS.teamName);
+  const teamShortName = state.writeDraft.team.teamShortName ?? fitText(getPreferredTeamName(), FIELD_LIMITS.teamShortName);
+  const stadiumName = state.writeDraft.team.stadiumName ?? "";
+  const teamCountry = state.writeDraft.team.teamCountry ?? "";
+  const managerName = state.writeDraft.team.managerName ?? fitText(manager.name || "", FIELD_LIMITS.managerName);
+  const managerCountry = state.writeDraft.team.managerCountry ?? getPesNationalityName(manager.nationality || "");
+
+  elements.teamNameInput.value = teamName;
+  elements.teamShortNameInput.value = teamShortName;
+  elements.stadiumNameInput.value = stadiumName;
+  elements.managerNameInput.value = managerName;
+  elements.teamCountrySelect.innerHTML = getCountryOptions(teamCountry);
+  elements.managerCountrySelect.innerHTML = getCountryOptions(managerCountry);
+
+  elements.saveEditedFileButton.disabled = !state.binBytes || !state.binPlayers.length;
+  elements.writePlayersBody.innerHTML = state.binPlayers.map((binPlayer) => {
+    const defaults = getWritePlayerDefaults(binPlayer);
+    const name = getWritePlayerValue(binPlayer.slot, "name", defaults.name);
+    const shirtName = getWritePlayerValue(binPlayer.slot, "shirtName", defaults.shirtName);
+    const position = getWritePlayerValue(binPlayer.slot, "position", defaults.position);
+    const foot = getWritePlayerValue(binPlayer.slot, "foot", defaults.foot);
+    const age = getWritePlayerValue(binPlayer.slot, "age", defaults.age);
+    const country = getWritePlayerValue(binPlayer.slot, "country", defaults.country);
+    const shirtNumber = getWritePlayerValue(binPlayer.slot, "shirtNumber", defaults.shirtNumber);
+
+    return `
+      <tr class="${getSlotGroupClass(binPlayer.slot)}">
+        <td>${binPlayer.slot}</td>
+        <td><input data-write-player="${binPlayer.slot}" data-write-field="name" maxlength="${FIELD_LIMITS.playerName}" value="${escapeHtml(name)}"></td>
+        <td><input data-write-player="${binPlayer.slot}" data-write-field="shirtName" maxlength="${FIELD_LIMITS.playerShirtName}" value="${escapeHtml(shirtName)}"></td>
+        <td><select data-write-player="${binPlayer.slot}" data-write-field="position">${getPositionOptions(position)}</select></td>
+        <td><select data-write-player="${binPlayer.slot}" data-write-field="foot">${getFootOptions(foot)}</select></td>
+        <td><input data-write-player="${binPlayer.slot}" data-write-field="age" type="number" min="15" max="60" value="${escapeHtml(age)}"></td>
+        <td><select data-write-player="${binPlayer.slot}" data-write-field="country">${getCountryOptions(country)}</select></td>
+        <td><input data-write-player="${binPlayer.slot}" data-write-field="shirtNumber" type="number" min="0" max="99" value="${escapeHtml(shirtNumber)}"></td>
+      </tr>
+    `;
+  }).join("") || `<tr><td colspan="8" class="muted">Carregue o arquivo PES e monte a correspondencia para preparar a gravacao.</td></tr>`;
+
+  const mappedCount = state.mappings.filter((mapping) => mapping.playerKey).length;
+  elements.writeStatus.textContent = `${mappedCount}/25 jogadores mapeados para gravacao. Limites: equipe ${FIELD_LIMITS.teamName}, abreviacao ${FIELD_LIMITS.teamShortName}, estadio ${FIELD_LIMITS.stadiumName}, tecnico ${FIELD_LIMITS.managerName}, jogador ${FIELD_LIMITS.playerName}, nome na camisa ${FIELD_LIMITS.playerShirtName}.`;
+}
+
+function saveEditedFile() {
+  if (!state.binBytes) {
+    setStatus("Carregue o arquivo PES antes de gravar.", true);
+    return;
+  }
+
+  const edited = new Uint8Array(state.binBytes);
+  let writtenPlayers = 0;
+
+  state.binPlayers.forEach((binPlayer) => {
+    const base = PES_PLAYER_START + (binPlayer.slot - 1) * PES_PLAYER_SIZE;
+    if (base + PES_PLAYER_SIZE > edited.length) {
+      return;
+    }
+
+    const defaults = getWritePlayerDefaults(binPlayer);
+    const name = formatPesPlayerName(getWritePlayerValue(binPlayer.slot, "name", defaults.name), FIELD_LIMITS.playerName);
+    const shirtName = formatPesPlayerName(getWritePlayerValue(binPlayer.slot, "shirtName", defaults.shirtName) || name, FIELD_LIMITS.playerShirtName);
+    const position = getWritePlayerValue(binPlayer.slot, "position", defaults.position);
+    const foot = getWritePlayerValue(binPlayer.slot, "foot", defaults.foot);
+    const shirtNumber = getShirtNumberValue(getWritePlayerValue(binPlayer.slot, "shirtNumber", defaults.shirtNumber));
+
+    writeAscii(edited, base + 0x17, 0x2e, name);
+    writeAscii(edited, base + 0x45, 0x13, shirtName);
+    writeBitField(edited, base, 38, 4, getPositionValue(position));
+    writeBitField(edited, base, STRONG_FOOT_BIT, 1, foot === "L" ? 1 : 0);
+    edited[PES_SHIRT_NUMBERS_OFFSET + (binPlayer.slot - 1)] = shirtNumber;
+    writtenPlayers += 1;
+  });
+
+  const blob = new Blob([edited], { type: "application/octet-stream" });
+  const link = document.createElement("a");
+  const baseName = state.binFileName.replace(/\.[^.]+$/, "");
+  link.href = URL.createObjectURL(blob);
+  link.download = `${baseName}_editado.bin`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
+
+  setStatus(`Arquivo editado gerado.\nJogadores gravados: ${writtenPlayers}\nCampos gravados nesta versao: nome, nome na camisa, posicao, pe forte e numero da camisa.\nEquipe, tecnico, estadio, idade e pais ainda estao preparados na tela, mas aguardam offset confirmado para escrita segura.`);
 }
 
 function render() {
@@ -1047,8 +1391,9 @@ function render() {
     return `
       <tr class="${getSlotGroupClass(binPlayer.slot)}">
         <td>${binPlayer.slot}</td>
-        <td>${escapeHtml(binPlayer.name)}<br><span class="muted">${escapeHtml(binPlayer.shirtName)} | ID ${binPlayer.internalId}</span></td>
+        <td>${escapeHtml(binPlayer.name)}<br><span class="muted">#${escapeHtml(binPlayer.shirtNumber || "0")} | ${escapeHtml(binPlayer.shirtName)} | ID ${binPlayer.internalId}</span></td>
         <td>${escapeHtml(binPlayer.position.label)}</td>
+        <td>${escapeHtml(binPlayer.strongFoot.label)}</td>
         <td>
           <select class="slot-select" data-map-slot="${binPlayer.slot}">
             <option value="">Sem jogador selecionado</option>
@@ -1058,18 +1403,20 @@ function render() {
         <td class="compact">${mappedPlayer ? escapeHtml(describeTransfermarktPlayer(mappedPlayer)) : ""}</td>
       </tr>
     `;
-  }).join("") || `<tr><td colspan="4" class="muted">Carregue o arquivo PES para ver os 25 slots.</td></tr>`;
+  }).join("") || `<tr><td colspan="6" class="muted">Carregue o arquivo PES para ver os 25 slots.</td></tr>`;
 
   elements.binBody.innerHTML = state.binPlayers.map((player) => `
     <tr>
       <td>${player.slot}</td>
       <td>${escapeHtml(player.name)}</td>
       <td>${escapeHtml(player.shirtName)}</td>
+      <td>${escapeHtml(player.shirtNumber || "0")}</td>
       <td>${escapeHtml(player.position.label)}</td>
+      <td>${escapeHtml(player.strongFoot.label)}</td>
       <td>${player.internalId}</td>
       <td>${player.offset}</td>
     </tr>
-  `).join("") || `<tr><td colspan="6" class="muted">Nenhum arquivo PES carregado.</td></tr>`;
+  `).join("") || `<tr><td colspan="8" class="muted">Nenhum arquivo PES carregado.</td></tr>`;
 
   elements.eventsBody.innerHTML = state.events.map((event) => `
     <tr>
@@ -1088,6 +1435,7 @@ function render() {
     </tr>
   `).join("") || `<tr><td colspan="3" class="muted">Nenhum alerta no momento.</td></tr>`;
 
+  renderWritePanel();
   bindDynamicControls();
 }
 
@@ -1176,6 +1524,7 @@ async function enrichIndividualPlayers() {
 elements.binFile.addEventListener("change", async () => {
   const [file] = elements.binFile.files;
   if (!file) return;
+  state.binFileName = file.name || "Editado.bin";
   parsePesBin(await file.arrayBuffer());
 });
 
@@ -1196,16 +1545,20 @@ elements.mapByOrderButton.addEventListener("click", () => {
   render();
   setStatus("Correspondencia por ordem atualizada.");
 });
+elements.saveEditedFileButton.addEventListener("click", saveEditedFile);
 
 elements.clearButton.addEventListener("click", () => {
   state.transfermarktPlayers = [];
   state.binPlayers = [];
+  state.binBytes = null;
+  state.binFileName = "Editado.bin";
   state.events = [];
   state.issues = [];
   state.clubPages = [];
   state.staff = [];
   state.selectedPlayerKeys = [];
   state.mappings = [];
+  state.writeDraft = { team: {}, players: {} };
   elements.binFile.value = "";
   elements.htmlFile.value = "";
   elements.urlInput.value = "";
