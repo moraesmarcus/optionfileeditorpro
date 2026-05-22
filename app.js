@@ -57,6 +57,13 @@ const PES_PLAYER_START = 0x850;
 const PES_PLAYER_SIZE = 0xbc;
 const PES_PLAYER_COUNT = 25;
 const PES_SHIRT_NUMBERS_OFFSET = 0x30c;
+const TEAM_NAME_OFFSET = 0xe8;
+const TEAM_SHORT_NAME_OFFSET = 0x12e;
+const TEAM_COUNTRY_OFFSET = 0x5e;
+const MANAGER_COUNTRY_OFFSET = 0x234;
+const MANAGER_NAME_OFFSET = 0x239;
+const PLAYER_COUNTRY_OFFSET = 0xaa;
+const PLAYER_AGE_BIT = 32;
 const TRANSFERMARKT_BASE_URL = "https://www.transfermarkt.com.br";
 const FIELD_LIMITS = {
   teamName: 60,
@@ -70,6 +77,12 @@ const STRONG_FOOT_BIT = 147;
 const STRONG_FOOT_MAP = {
   L: "Esquerdo",
   R: "Direito",
+};
+const PES_NATIONALITY_CODE_OVERRIDES = {
+  ARGENTINA: 144,
+  ECUADOR: 149,
+  TOGO: 91,
+  URUGUAY: 152,
 };
 const PES_POSITION_MAP = {
   0: { code: "GK", description: "Goleiro" },
@@ -938,6 +951,14 @@ function writeAscii(bytes, start, length, value) {
   }
 }
 
+function writeUint16(bytes, offset, value) {
+  if (!Number.isFinite(value) || offset + 1 >= bytes.length) {
+    return;
+  }
+  bytes[offset] = value & 0xff;
+  bytes[offset + 1] = (value >> 8) & 0xff;
+}
+
 function normalizeEditableText(value, { trim = true } = {}) {
   const normalized = decodeHtmlText(value || "")
     .normalize("NFD")
@@ -995,6 +1016,26 @@ function getShirtNumberValue(value) {
     return 0;
   }
   return Math.max(0, Math.min(99, numericValue));
+}
+
+function getAgeValue(value) {
+  const numericValue = Number.parseInt(String(value ?? "").replace(/\D/g, ""), 10);
+  if (!Number.isFinite(numericValue)) {
+    return 15;
+  }
+  return Math.max(15, Math.min(60, numericValue));
+}
+
+function getPesNationalityCode(country) {
+  const normalized = normalizeCountryName(country);
+  if (!normalized) {
+    return null;
+  }
+  if (PES_NATIONALITY_CODE_OVERRIDES[normalized] !== undefined) {
+    return PES_NATIONALITY_CODE_OVERRIDES[normalized];
+  }
+  const index = PES_NATIONALITIES.findIndex((item) => normalizeCountryName(item) === normalized);
+  return index >= 0 ? index + 1 : null;
 }
 
 function getFirstPesNationality(nationalities = []) {
@@ -1155,9 +1196,17 @@ function bindDynamicControls() {
     });
     control.addEventListener("change", () => {
       const slot = control.dataset.writePlayer;
+      const field = control.dataset.writeField;
+      const limit = Number(control.getAttribute("maxlength")) || control.value.length;
+      const textValue = field === "name" || field === "shirtName"
+        ? formatPesPlayerName(control.value, limit)
+        : toPesUpper(control.value);
+      if (control.tagName === "INPUT" && control.type !== "number" && control.value !== textValue) {
+        control.value = textValue;
+      }
       state.writeDraft.players[slot] = {
         ...(state.writeDraft.players[slot] || {}),
-        [control.dataset.writeField]: control.tagName === "INPUT" && control.type !== "number" ? toPesUpper(control.value) : control.value,
+        [field]: control.tagName === "INPUT" && control.type !== "number" ? textValue : control.value,
       };
     });
   });
@@ -1221,6 +1270,10 @@ function getWritePlayerValue(slot, field, fallback) {
   return state.writeDraft.players[slot]?.[field] ?? fallback ?? "";
 }
 
+function getCleanWritePlayerText(slot, field, fallback, limit) {
+  return formatPesPlayerName(getWritePlayerValue(slot, field, fallback), limit);
+}
+
 function getPreferredTeamName() {
   const byMatch = state.transfermarktPlayers.find((player) => player.teamName)?.teamName;
   const bySquad = state.clubPages.find((page) => page.type === "Plantel")?.name;
@@ -1250,8 +1303,8 @@ function renderWritePanel() {
   elements.saveEditedFileButton.disabled = !state.binBytes || !state.binPlayers.length;
   elements.writePlayersBody.innerHTML = state.binPlayers.map((binPlayer) => {
     const defaults = getWritePlayerDefaults(binPlayer);
-    const name = getWritePlayerValue(binPlayer.slot, "name", defaults.name);
-    const shirtName = getWritePlayerValue(binPlayer.slot, "shirtName", defaults.shirtName);
+    const name = getCleanWritePlayerText(binPlayer.slot, "name", defaults.name, FIELD_LIMITS.playerName);
+    const shirtName = getCleanWritePlayerText(binPlayer.slot, "shirtName", defaults.shirtName || name, FIELD_LIMITS.playerShirtName);
     const position = getWritePlayerValue(binPlayer.slot, "position", defaults.position);
     const foot = getWritePlayerValue(binPlayer.slot, "foot", defaults.foot);
     const age = getWritePlayerValue(binPlayer.slot, "age", defaults.age);
@@ -1284,6 +1337,21 @@ function saveEditedFile() {
 
   const edited = new Uint8Array(state.binBytes);
   let writtenPlayers = 0;
+  let writtenCountries = 0;
+
+  writeAscii(edited, TEAM_NAME_OFFSET, FIELD_LIMITS.teamName + 1, state.writeDraft.team.teamName ?? elements.teamNameInput.value);
+  writeAscii(edited, TEAM_SHORT_NAME_OFFSET, FIELD_LIMITS.teamShortName + 1, state.writeDraft.team.teamShortName ?? elements.teamShortNameInput.value);
+  writeAscii(edited, MANAGER_NAME_OFFSET, FIELD_LIMITS.managerName + 1, state.writeDraft.team.managerName ?? elements.managerNameInput.value);
+
+  const teamCountryCode = getPesNationalityCode(state.writeDraft.team.teamCountry ?? elements.teamCountrySelect.value);
+  if (teamCountryCode !== null) {
+    writeUint16(edited, TEAM_COUNTRY_OFFSET, teamCountryCode);
+  }
+
+  const managerCountryCode = getPesNationalityCode(state.writeDraft.team.managerCountry ?? elements.managerCountrySelect.value);
+  if (managerCountryCode !== null) {
+    writeUint16(edited, MANAGER_COUNTRY_OFFSET, managerCountryCode);
+  }
 
   state.binPlayers.forEach((binPlayer) => {
     const base = PES_PLAYER_START + (binPlayer.slot - 1) * PES_PLAYER_SIZE;
@@ -1297,11 +1365,18 @@ function saveEditedFile() {
     const position = getWritePlayerValue(binPlayer.slot, "position", defaults.position);
     const foot = getWritePlayerValue(binPlayer.slot, "foot", defaults.foot);
     const shirtNumber = getShirtNumberValue(getWritePlayerValue(binPlayer.slot, "shirtNumber", defaults.shirtNumber));
+    const age = getAgeValue(getWritePlayerValue(binPlayer.slot, "age", defaults.age));
+    const countryCode = getPesNationalityCode(getWritePlayerValue(binPlayer.slot, "country", defaults.country));
 
     writeAscii(edited, base + 0x17, 0x2e, name);
     writeAscii(edited, base + 0x45, 0x13, shirtName);
     writeBitField(edited, base, 38, 4, getPositionValue(position));
     writeBitField(edited, base, STRONG_FOOT_BIT, 1, foot === "L" ? 1 : 0);
+    writeBitField(edited, base, PLAYER_AGE_BIT, 6, age);
+    if (countryCode !== null) {
+      writeUint16(edited, base + PLAYER_COUNTRY_OFFSET, countryCode);
+      writtenCountries += 1;
+    }
     edited[PES_SHIRT_NUMBERS_OFFSET + (binPlayer.slot - 1)] = shirtNumber;
     writtenPlayers += 1;
   });
@@ -1316,7 +1391,7 @@ function saveEditedFile() {
   link.remove();
   URL.revokeObjectURL(link.href);
 
-  setStatus(`Arquivo editado gerado.\nJogadores gravados: ${writtenPlayers}\nCampos gravados nesta versao: nome, nome na camisa, posicao, pe forte e numero da camisa.\nEquipe, tecnico, estadio, idade e pais ainda estao preparados na tela, mas aguardam offset confirmado para escrita segura.`);
+  setStatus(`Arquivo editado gerado.\nJogadores gravados: ${writtenPlayers}\nPaises de jogadores gravados: ${writtenCountries}\nCampos gravados nesta versao: equipe, abreviacao, tecnico, pais da equipe, pais do tecnico, nome, nome na camisa, posicao, pe forte, idade, pais do jogador e numero da camisa.\nNome do estadio segue preparado na tela, mas ainda sem offset textual confirmado no arquivo.`);
 }
 
 function render() {
