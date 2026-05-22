@@ -229,6 +229,37 @@
       color: #12304f;
     }
 
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .toolbar .muted {
+      margin-left: auto;
+    }
+
+    .check-cell {
+      width: 46px;
+      text-align: center;
+    }
+
+    .check-cell input {
+      width: 18px;
+      height: 18px;
+    }
+
+    .slot-select {
+      min-width: 280px;
+    }
+
+    .compact {
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
     @media (max-width: 980px) {
       main {
         grid-template-columns: 1fr;
@@ -290,12 +321,18 @@
       <section>
         <div class="tabs">
           <button class="tab active" data-panel="playersPanel" type="button">Jogadores</button>
+          <button class="tab" data-panel="selectionPanel" type="button">Selecionar 25</button>
+          <button class="tab" data-panel="mappingPanel" type="button">Correspondência</button>
           <button class="tab" data-panel="binPanel" type="button">Arquivo PES</button>
           <button class="tab" data-panel="eventsPanel" type="button">Jogo</button>
           <button class="tab" data-panel="issuesPanel" type="button">Alertas</button>
         </div>
 
         <div id="playersPanel" class="panel active">
+          <div class="toolbar">
+            <button id="enrichButton" type="button">Buscar dados individuais</button>
+            <span id="enrichStatus" class="muted">Use depois de carregar uma pagina de jogo ou plantel.</span>
+          </div>
           <div class="table-wrap">
             <table>
               <thead>
@@ -312,6 +349,51 @@
                 </tr>
               </thead>
               <tbody id="playersBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="selectionPanel" class="panel">
+          <div class="toolbar">
+            <button id="selectFirst25Button" type="button">Selecionar primeiros 25</button>
+            <button id="clearSelectionButton" type="button" class="secondary">Limpar seleção</button>
+            <span id="selectionStatus" class="muted">0/25 selecionados</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th class="check-cell">Usar</th>
+                  <th>#</th>
+                  <th>Nome</th>
+                  <th>Posição</th>
+                  <th>Idade</th>
+                  <th>Pé</th>
+                  <th>Altura</th>
+                  <th>Fonte</th>
+                </tr>
+              </thead>
+              <tbody id="selectionBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="mappingPanel" class="panel">
+          <div class="toolbar">
+            <button id="mapByOrderButton" type="button">Mapear por ordem</button>
+            <span id="mappingStatus" class="muted">Selecione 25 jogadores para montar a correspondência.</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Slot PES</th>
+                  <th>Atual no arquivo</th>
+                  <th>Novo jogador Transfermarkt</th>
+                  <th>Dados que vieram do site</th>
+                </tr>
+              </thead>
+              <tbody id="mappingBody"></tbody>
             </table>
           </div>
         </div>

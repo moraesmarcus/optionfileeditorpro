@@ -24,6 +24,9 @@ Depois acesse `http://localhost:4173`.
 - Le uma URL do Transfermarkt usando um servidor local.
 - Tambem aceita HTML salvo do Transfermarkt.
 - Extrai dados de pagina de jogo, plantel e jogador individual.
+- Busca os dados individuais dos jogadores a partir dos links encontrados.
+- Permite selecionar exatamente 25 jogadores do Transfermarkt.
+- Monta a correspondencia dos 25 selecionados com os 25 slots do arquivo PES.
 - Mostra alertas quando algum campo nao puder ser lido.
 
 Esta versao ainda nao grava alteracoes no `.bin`.

@@ -4,6 +4,8 @@ const state = {
   events: [],
   issues: [],
   clubPages: [],
+  selectedPlayerKeys: [],
+  mappings: [],
 };
 
 const elements = {
@@ -20,14 +22,24 @@ const elements = {
   issueCount: document.querySelector("#issueCount"),
   clubInfo: document.querySelector("#clubInfo"),
   playersBody: document.querySelector("#playersBody"),
+  selectionBody: document.querySelector("#selectionBody"),
+  mappingBody: document.querySelector("#mappingBody"),
   binBody: document.querySelector("#binBody"),
   eventsBody: document.querySelector("#eventsBody"),
   issuesBody: document.querySelector("#issuesBody"),
+  enrichButton: document.querySelector("#enrichButton"),
+  enrichStatus: document.querySelector("#enrichStatus"),
+  selectFirst25Button: document.querySelector("#selectFirst25Button"),
+  clearSelectionButton: document.querySelector("#clearSelectionButton"),
+  selectionStatus: document.querySelector("#selectionStatus"),
+  mapByOrderButton: document.querySelector("#mapByOrderButton"),
+  mappingStatus: document.querySelector("#mappingStatus"),
 };
 
 const PES_PLAYER_START = 0x850;
 const PES_PLAYER_SIZE = 0xbc;
 const PES_PLAYER_COUNT = 25;
+const TRANSFERMARKT_BASE_URL = "https://www.transfermarkt.com.br";
 
 function setStatus(message, isError = false) {
   elements.status.textContent = message;
@@ -51,6 +63,23 @@ function stripTags(value) {
 function getPlayerIdFromLink(link) {
   const match = (link || "").match(/\/spieler\/(\d+)/);
   return match ? match[1] : "";
+}
+
+function getPlayerKey(player) {
+  return player.transfermarktId || player.profileUrl || player.name;
+}
+
+function absoluteTransfermarktUrl(link) {
+  if (!link) {
+    return "";
+  }
+  if (/^https?:\/\//i.test(link)) {
+    return link;
+  }
+  if (link.startsWith("/")) {
+    return `${TRANSFERMARKT_BASE_URL}${link}`;
+  }
+  return `${TRANSFERMARKT_BASE_URL}/${link}`;
 }
 
 function getClubIdFromUrl(url) {
@@ -79,12 +108,16 @@ function addIssue(field, reason, source) {
 }
 
 function upsertPlayer(player) {
-  const key = player.transfermarktId || player.profileUrl || player.name;
-  const existing = state.transfermarktPlayers.find((item) => (item.transfermarktId || item.profileUrl || item.name) === key);
+  if (player.profileUrl) {
+    player.profileUrl = absoluteTransfermarktUrl(player.profileUrl);
+  }
+
+  const key = getPlayerKey(player);
+  const existing = state.transfermarktPlayers.find((item) => getPlayerKey(item) === key);
 
   if (existing) {
     Object.entries(player).forEach(([field, value]) => {
-      if (value !== undefined && value !== null && value !== "") {
+      if (value !== undefined && value !== null && value !== "" && (!Array.isArray(value) || value.length)) {
         existing[field] = value;
       }
     });
@@ -206,12 +239,21 @@ function parsePlayerPage(html, sourceLabel) {
 
 function getInfoTableValue(doc, label) {
   const cells = [...doc.querySelectorAll(".info-table__content")];
+  const wanted = normalizeLabel(label);
   for (let index = 0; index < cells.length - 1; index += 1) {
-    if (cleanText(cells[index].textContent) === label) {
+    if (normalizeLabel(cells[index].textContent) === wanted) {
       return cleanText(cells[index + 1].textContent);
     }
   }
   return "";
+}
+
+function normalizeLabel(value) {
+  return cleanText(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9/]+/gi, "")
+    .toLowerCase();
 }
 
 function parseMatchPage(html, sourceLabel) {
@@ -348,6 +390,83 @@ function readUint32(bytes, offset) {
   return (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0;
 }
 
+function getSelectedPlayers() {
+  return state.selectedPlayerKeys
+    .map((key) => state.transfermarktPlayers.find((player) => getPlayerKey(player) === key))
+    .filter(Boolean);
+}
+
+function describeTransfermarktPlayer(player) {
+  return [
+    player.position || player.detailedPosition,
+    player.age ? `${player.age} anos` : "",
+    player.foot ? `pe ${player.foot}` : "",
+    player.height,
+    (player.nationalities || []).join(", "),
+  ].filter(Boolean).join(" | ");
+}
+
+function bindDynamicControls() {
+  document.querySelectorAll("[data-select-player]").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      const key = checkbox.dataset.selectPlayer;
+
+      if (checkbox.checked) {
+        if (state.selectedPlayerKeys.length >= PES_PLAYER_COUNT) {
+          checkbox.checked = false;
+          setStatus("Selecao limitada a 25 jogadores.", true);
+          return;
+        }
+        state.selectedPlayerKeys.push(key);
+      } else {
+        state.selectedPlayerKeys = state.selectedPlayerKeys.filter((item) => item !== key);
+        state.mappings = state.mappings.map((mapping) => mapping.playerKey === key ? { ...mapping, playerKey: "" } : mapping);
+      }
+
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-map-slot]").forEach((select) => {
+    select.addEventListener("change", () => {
+      const slot = Number(select.dataset.mapSlot);
+      setMapping(slot, select.value);
+      render();
+    });
+  });
+}
+
+function setMapping(slot, playerKey) {
+  const existing = state.mappings.find((mapping) => mapping.slot === slot);
+  if (existing) {
+    existing.playerKey = playerKey;
+    return;
+  }
+  state.mappings.push({ slot, playerKey });
+}
+
+function selectFirst25Players() {
+  state.selectedPlayerKeys = state.transfermarktPlayers.slice(0, PES_PLAYER_COUNT).map(getPlayerKey);
+  mapByOrder();
+  render();
+  setStatus(`${state.selectedPlayerKeys.length} jogadores selecionados.`);
+}
+
+function clearSelection() {
+  state.selectedPlayerKeys = [];
+  state.mappings = [];
+  render();
+  setStatus("Selecao de jogadores limpa.");
+}
+
+function mapByOrder() {
+  const selectedPlayers = getSelectedPlayers();
+  state.mappings = state.binPlayers.slice(0, PES_PLAYER_COUNT).map((binPlayer, index) => ({
+    slot: binPlayer.slot,
+    playerKey: getPlayerKey(selectedPlayers[index] || {}),
+  }));
+}
+
 function render() {
   elements.clubCount.textContent = state.clubPages.length;
   elements.playerCount.textContent = state.transfermarktPlayers.length;
@@ -371,6 +490,51 @@ function render() {
       <td>${escapeHtml((player.sources || []).join(", "))}</td>
     </tr>
   `).join("") || `<tr><td colspan="9" class="muted">Nenhum jogador do Transfermarkt carregado.</td></tr>`;
+
+  const selectedPlayers = getSelectedPlayers();
+  elements.selectionStatus.textContent = `${selectedPlayers.length}/25 selecionados`;
+  elements.selectionBody.innerHTML = state.transfermarktPlayers.map((player) => {
+    const key = getPlayerKey(player);
+    const checked = state.selectedPlayerKeys.includes(key) ? "checked" : "";
+    return `
+      <tr>
+        <td class="check-cell"><input type="checkbox" data-select-player="${escapeHtml(key)}" ${checked}></td>
+        <td>${escapeHtml(player.shirtNumber || "")}</td>
+        <td>${escapeHtml(player.name || "")}${player.fullName ? `<br><span class="muted">${escapeHtml(player.fullName)}</span>` : ""}</td>
+        <td>${escapeHtml(player.position || player.detailedPosition || "")}</td>
+        <td>${escapeHtml(player.age || "")}</td>
+        <td>${escapeHtml(player.foot || "")}</td>
+        <td>${escapeHtml(player.height || "")}</td>
+        <td>${escapeHtml((player.sources || []).join(", "))}</td>
+      </tr>
+    `;
+  }).join("") || `<tr><td colspan="8" class="muted">Carregue jogadores do Transfermarkt para selecionar os 25.</td></tr>`;
+
+  const mappedCount = state.mappings.filter((mapping) => mapping.playerKey).length;
+  elements.mappingStatus.textContent = `${mappedCount}/25 slots mapeados`;
+  elements.mappingBody.innerHTML = state.binPlayers.map((binPlayer, index) => {
+    const mapping = state.mappings.find((item) => item.slot === binPlayer.slot);
+    const selectedOptions = selectedPlayers.map((player) => {
+      const key = getPlayerKey(player);
+      const selected = mapping?.playerKey === key ? "selected" : "";
+      return `<option value="${escapeHtml(key)}" ${selected}>${escapeHtml(player.shirtNumber ? `${player.shirtNumber} - ${player.name}` : player.name)}</option>`;
+    }).join("");
+    const mappedPlayer = selectedPlayers.find((player) => getPlayerKey(player) === mapping?.playerKey);
+
+    return `
+      <tr>
+        <td>${binPlayer.slot}</td>
+        <td>${escapeHtml(binPlayer.name)}<br><span class="muted">${escapeHtml(binPlayer.shirtName)} | ID ${binPlayer.internalId}</span></td>
+        <td>
+          <select class="slot-select" data-map-slot="${binPlayer.slot}">
+            <option value="">Sem jogador selecionado</option>
+            ${selectedOptions}
+          </select>
+        </td>
+        <td class="compact">${mappedPlayer ? escapeHtml(describeTransfermarktPlayer(mappedPlayer)) : ""}</td>
+      </tr>
+    `;
+  }).join("") || `<tr><td colspan="4" class="muted">Carregue o arquivo PES para ver os 25 slots.</td></tr>`;
 
   elements.binBody.innerHTML = state.binPlayers.map((player) => `
     <tr>
@@ -398,6 +562,8 @@ function render() {
       <td>${escapeHtml(issue.source)}</td>
     </tr>
   `).join("") || `<tr><td colspan="3" class="muted">Nenhum alerta no momento.</td></tr>`;
+
+  bindDynamicControls();
 }
 
 function escapeHtml(value) {
@@ -438,6 +604,50 @@ async function loadTransfermarktUrl() {
   }
 }
 
+async function fetchTransfermarktHtml(url) {
+  const response = await fetch(`/fetch?url=${encodeURIComponent(url)}`);
+  const payload = await response.json();
+
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Falha ao buscar a URL.");
+  }
+
+  return payload.html;
+}
+
+async function enrichIndividualPlayers() {
+  const playersWithProfiles = state.transfermarktPlayers.filter((player) => player.profileUrl);
+
+  if (!playersWithProfiles.length) {
+    setStatus("Nenhum link individual de jogador encontrado para buscar.", true);
+    return;
+  }
+
+  elements.enrichButton.disabled = true;
+  let successCount = 0;
+  let failCount = 0;
+
+  for (let index = 0; index < playersWithProfiles.length; index += 1) {
+    const player = playersWithProfiles[index];
+    elements.enrichStatus.textContent = `${index + 1}/${playersWithProfiles.length}: ${player.name}`;
+
+    try {
+      const html = await fetchTransfermarktHtml(player.profileUrl);
+      parsePlayerPage(html, player.profileUrl);
+      successCount += 1;
+    } catch (error) {
+      failCount += 1;
+      addIssue(`Perfil individual de ${player.name}`, error.message, player.profileUrl);
+      render();
+    }
+  }
+
+  elements.enrichButton.disabled = false;
+  elements.enrichStatus.textContent = `${successCount} perfis lidos, ${failCount} falhas.`;
+  setStatus(`Busca individual concluida.\nPerfis lidos: ${successCount}\nFalhas: ${failCount}${failCount ? "\nVeja a aba Alertas para detalhes." : ""}`, failCount > 0);
+  render();
+}
+
 elements.binFile.addEventListener("change", async () => {
   const [file] = elements.binFile.files;
   if (!file) return;
@@ -453,6 +663,14 @@ elements.htmlFile.addEventListener("change", async () => {
 });
 
 elements.loadUrlButton.addEventListener("click", loadTransfermarktUrl);
+elements.enrichButton.addEventListener("click", enrichIndividualPlayers);
+elements.selectFirst25Button.addEventListener("click", selectFirst25Players);
+elements.clearSelectionButton.addEventListener("click", clearSelection);
+elements.mapByOrderButton.addEventListener("click", () => {
+  mapByOrder();
+  render();
+  setStatus("Correspondencia por ordem atualizada.");
+});
 
 elements.clearButton.addEventListener("click", () => {
   state.transfermarktPlayers = [];
@@ -460,9 +678,12 @@ elements.clearButton.addEventListener("click", () => {
   state.events = [];
   state.issues = [];
   state.clubPages = [];
+  state.selectedPlayerKeys = [];
+  state.mappings = [];
   elements.binFile.value = "";
   elements.htmlFile.value = "";
   elements.urlInput.value = "";
+  elements.enrichStatus.textContent = "Use depois de carregar uma pagina de jogo ou plantel.";
   render();
   setStatus("Dados limpos.");
 });
