@@ -24,9 +24,13 @@ Depois acesse `http://localhost:4173`.
 - Le uma URL do Transfermarkt usando um servidor local.
 - Tambem aceita HTML salvo do Transfermarkt.
 - Extrai dados de pagina de jogo, plantel e jogador individual.
+- Em pagina de jogo, permite escolher mandante, visitante ou ambos para importar titulares e reservas do mesmo time.
 - Busca os dados individuais dos jogadores a partir dos links encontrados.
+- Le o treinador quando ele aparece na pagina de jogo ou no plantel.
 - Permite selecionar exatamente 25 jogadores do Transfermarkt.
 - Monta a correspondencia dos 25 selecionados com os 25 slots do arquivo PES.
+- Le a posicao registrada do jogador no arquivo PES e mostra codigo + descricao, como `LWF - Ponta Esquerda`.
+- Valida a nacionalidade lida no Transfermarkt contra a lista de 220 nacionalidades do editor PES.
 - Mostra alertas quando algum campo nao puder ser lido.
 
 Esta versao ainda nao grava alteracoes no `.bin`.

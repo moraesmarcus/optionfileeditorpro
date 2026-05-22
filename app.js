@@ -4,6 +4,7 @@ const state = {
   events: [],
   issues: [],
   clubPages: [],
+  staff: [],
   selectedPlayerKeys: [],
   mappings: [],
 };
@@ -12,6 +13,7 @@ const elements = {
   binFile: document.querySelector("#binFile"),
   htmlFile: document.querySelector("#htmlFile"),
   sourceType: document.querySelector("#sourceType"),
+  matchTeamSide: document.querySelector("#matchTeamSide"),
   urlInput: document.querySelector("#urlInput"),
   loadUrlButton: document.querySelector("#loadUrlButton"),
   clearButton: document.querySelector("#clearButton"),
@@ -40,6 +42,305 @@ const PES_PLAYER_START = 0x850;
 const PES_PLAYER_SIZE = 0xbc;
 const PES_PLAYER_COUNT = 25;
 const TRANSFERMARKT_BASE_URL = "https://www.transfermarkt.com.br";
+const PES_POSITION_MAP = {
+  0: { code: "GK", description: "Goleiro" },
+  1: { code: "CB", description: "Zagueiro" },
+  2: { code: "LB", description: "Lateral Esquerdo" },
+  3: { code: "RB", description: "Lateral Direito" },
+  4: { code: "DMF", description: "Volante" },
+  5: { code: "CMF", description: "Meio Campo" },
+  6: { code: "LM", description: "Meia Esquerda" },
+  7: { code: "RM", description: "Meia Direita" },
+  8: { code: "AMF", description: "Armador" },
+  9: { code: "LWF", description: "Ponta Esquerda" },
+  10: { code: "RWF", description: "Ponta Direita" },
+  11: { code: "SS", description: "Segundo Atacante" },
+  12: { code: "CF", description: "Centroavante" },
+};
+
+const PES_NATIONALITIES = `AFGHANISTAN
+BAHRAIN
+BANGLADESH
+BHUTAN
+BRUNEI
+CAMBODIA
+CHINA
+HONG KONG
+INDIA
+INDONESIA
+IRAN
+IRAQ
+JAPAN
+JORDAN
+NORTH KOREA
+SOUTH KOREA
+KUWAIT
+LAOS
+LEBANON
+MACAO
+MALAYSIA
+MALDIVES
+MONGOLIA
+MYANMAR
+NEPAL
+OMAN
+PAKISTAN
+PALESTINE
+PHILIPPINES
+QATAR
+SAUDI ARABIA
+SINGAPORE
+SRI LANKA
+SYRIA
+THAILAND
+UAE
+VIETNAM
+YEMEN
+KYRGYZ REPUBLIC
+TAJIKISTAN
+TURKMENISTAN
+EAST TIMOR
+ALGERIA
+ANGOLA
+BENIN
+BOTSWANA
+BURKINA FASO
+BURUNDI
+CAMEROON
+CAPE VERDE
+CENTRAL AFRICAN REP.
+CHAD
+THE COMOROS
+CONGO DR
+COTE D'IVOIRE
+DJIBOUTI
+EGYPT
+EQUATORIAL GUINEA
+ERITREA
+ETHIOPIA
+GABON
+REPUBLIC OF THE GAMBIA
+GHANA
+GUINEA
+GUINEA-BISSAU
+KENYA
+LESOTHO
+LIBERIA
+LIBYA
+MADAGASCAR
+MALAWI
+MALI
+MAURITANIA
+MAURITIUS
+MOROCCO
+MOZAMBIQUE
+NAMIBIA
+NIGER
+NIGERIA
+RWANDA
+SAO TOME AND PRINCIPE
+SENEGAL
+SEYCHELLES
+SIERRA LEONE
+SOMALIA
+SOUTH AFRICA
+SUDAN
+SWAZILAND
+TANZANIA
+TOGO
+TUNISIA
+UGANDA
+ZAMBIA
+ZIMBABWE
+CONGO
+REUNION
+ANGUILLA
+ANTIGUA AND BARBUDA
+ARUBA
+THE BAHAMAS
+BARBADOS
+BELIZE
+BERMUDA
+CANADA
+CAYMAN ISLANDS
+COSTA RICA
+CUBA
+DOMINICA
+DOMINICAN REPUBLIC
+EL SALVADOR
+GRENADA
+GUADELOUPE
+GUATEMALA
+HAITI
+HONDURAS
+JAMAICA
+MARTINIQUE
+MEXICO
+MONTSERRAT
+NETHERLANDS ANTILLES
+NICARAGUA
+PANAMA
+PUERTO RICO
+SAINT KITTS AND NEVIS
+SAINT LUCIA
+ST VINCENT & GRENADINES
+TRINIDAD AND TOBAGO
+TURKS AND CAICOS IS.
+UNITED STATES
+BRITISH VIRGIN ISLANDS
+U.S. VIRGIN ISLANDS
+FRENCH GUIANA
+SURINAME
+CURACAO
+ARGENTINA
+BOLIVIA
+BRAZIL
+CHILE
+COLOMBIA
+ECUADOR
+PARAGUAY
+PERU
+URUGUAY
+VENEZUELA
+GUYANA
+AMERICAN SAMOA
+AUSTRALIA
+COOK ISLANDS
+FIJI
+NEW CALEDONIA
+NEW ZEALAND
+PAPUA NEW GUINEA
+SAMOA
+SOLOMON ISLANDS
+TAHITI
+TONGA
+VANUATU
+GUAM
+PALAU
+ISRAEL
+TURKEY
+ALBANIA
+ANDORRA
+ARMENIA
+AUSTRIA
+AZERBAIJAN
+BELARUS
+BELGIUM
+BOSNIA AND HERZEGOVINA
+BULGARIA
+CROATIA
+CYPRUS
+CZECH REPUBLIC
+DENMARK
+ENGLAND
+ESTONIA
+FAROE ISLANDS
+FINLAND
+FRANCE
+GEORGIA
+GERMANY
+GREECE
+HUNGARY
+ICELAND
+IRELAND
+ITALY
+KAZAKHSTAN
+LATVIA
+LIECHTENSTEIN
+LITHUANIA
+LUXEMBOURG
+MACEDONIA
+MALTA
+MOLDOVA
+NETHERLANDS
+NORTHERN IRELAND
+NORWAY
+POLAND
+PORTUGAL
+ROMANIA
+RUSSIA
+SAN MARINO
+SCOTLAND
+SLOVAKIA
+SLOVENIA
+SPAIN
+SWEDEN
+SWITZERLAND
+UKRAINE
+UZBEKISTAN
+WALES
+GIBRALTAR
+MONACO
+OTHERS
+TAIWAN
+SERBIA
+MONTENEGRO
+SINT MAARTEN
+KOSOVO
+SOUTH SUDAN`.split("\n");
+
+const PES_NATIONALITY_SET = new Set(PES_NATIONALITIES.map(normalizeCountryName));
+const NATIONALITY_ALIASES = {
+  "ALEMANHA": "GERMANY",
+  "ARGELIA": "ALGERIA",
+  "ARMENIA": "ARMENIA",
+  "AUSTRALIA": "AUSTRALIA",
+  "AUSTRIA": "AUSTRIA",
+  "BELGICA": "BELGIUM",
+  "BOLIVIA": "BOLIVIA",
+  "BRASIL": "BRAZIL",
+  "CAMAROES": "CAMEROON",
+  "CANADA": "CANADA",
+  "CHILE": "CHILE",
+  "CHINA": "CHINA",
+  "COLOMBIA": "COLOMBIA",
+  "COREIA DO NORTE": "NORTH KOREA",
+  "COREIA DO SUL": "SOUTH KOREA",
+  "COSTA RICA": "COSTA RICA",
+  "CROACIA": "CROATIA",
+  "DINAMARCA": "DENMARK",
+  "EGITO": "EGYPT",
+  "EQUADOR": "ECUADOR",
+  "ESCOCIA": "SCOTLAND",
+  "ESLOVAQUIA": "SLOVAKIA",
+  "ESLOVENIA": "SLOVENIA",
+  "ESPANHA": "SPAIN",
+  "ESTADOS UNIDOS": "UNITED STATES",
+  "FINLANDIA": "FINLAND",
+  "FRANCA": "FRANCE",
+  "GALES": "WALES",
+  "GRECIA": "GREECE",
+  "HOLANDA": "NETHERLANDS",
+  "HUNGRIA": "HUNGARY",
+  "INGLATERRA": "ENGLAND",
+  "IRLANDA": "IRELAND",
+  "IRLANDA DO NORTE": "NORTHERN IRELAND",
+  "ISLANDIA": "ICELAND",
+  "ITALIA": "ITALY",
+  "JAPAO": "JAPAN",
+  "MARROCOS": "MOROCCO",
+  "MEXICO": "MEXICO",
+  "NORUEGA": "NORWAY",
+  "NOVA ZELANDIA": "NEW ZEALAND",
+  "PANAMA": "PANAMA",
+  "PARAGUAI": "PARAGUAY",
+  "PAIS DE GALES": "WALES",
+  "PAISES BAIXOS": "NETHERLANDS",
+  "PERU": "PERU",
+  "POLONIA": "POLAND",
+  "PORTUGAL": "PORTUGAL",
+  "REPUBLICA TCHECA": "CZECH REPUBLIC",
+  "ROMENIA": "ROMANIA",
+  "RUSSIA": "RUSSIA",
+  "SERVIA": "SERBIA",
+  "SUECIA": "SWEDEN",
+  "SUICA": "SWITZERLAND",
+  "TOGO": "TOGO",
+  "TURQUIA": "TURKEY",
+  "UCRANIA": "UKRAINE",
+  "URUGUAI": "URUGUAY",
+  "VENEZUELA": "VENEZUELA",
+};
 
 function setStatus(message, isError = false) {
   elements.status.textContent = message;
@@ -54,6 +355,47 @@ function decodeHtmlText(value) {
 
 function cleanText(value) {
   return decodeHtmlText(value || "").replace(/\u00a0/g, " ").trim();
+}
+
+function normalizeCountryName(value) {
+  return cleanText(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[’']/g, "'")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+function getPesNationalityName(value) {
+  const normalized = normalizeCountryName(value);
+  const alias = NATIONALITY_ALIASES[normalized] || normalized;
+  return PES_NATIONALITY_SET.has(alias) ? alias : "";
+}
+
+function getNationalityValidation(player) {
+  const nationalities = player.nationalities || [];
+  if (!nationalities.length) {
+    return { label: "Nao lida", warning: true };
+  }
+
+  const mapped = nationalities.map((nationality) => ({
+    original: nationality,
+    pesName: getPesNationalityName(nationality),
+  }));
+  const missing = mapped.filter((item) => !item.pesName);
+
+  if (missing.length) {
+    return {
+      label: `Fora da lista: ${missing.map((item) => item.original).join(", ")}`,
+      warning: true,
+    };
+  }
+
+  return {
+    label: mapped.map((item) => item.pesName).join(", "),
+    warning: false,
+  };
 }
 
 function stripTags(value) {
@@ -105,6 +447,32 @@ function normalizeSourceType(html, selectedType) {
 
 function addIssue(field, reason, source) {
   state.issues.push({ field, reason, source });
+}
+
+function getTrainerIdFromLink(link) {
+  const match = (link || "").match(/\/trainer\/(\d+)/);
+  return match ? match[1] : "";
+}
+
+function upsertStaff(member) {
+  if (member.profileUrl) {
+    member.profileUrl = absoluteTransfermarktUrl(member.profileUrl);
+  }
+
+  const key = member.trainerId || member.profileUrl || `${member.role}:${member.name}`;
+  const existing = state.staff.find((item) => (item.trainerId || item.profileUrl || `${item.role}:${item.name}`) === key);
+
+  if (existing) {
+    Object.entries(member).forEach(([field, value]) => {
+      if (value !== undefined && value !== null && value !== "" && (!Array.isArray(value) || value.length)) {
+        existing[field] = value;
+      }
+    });
+    existing.sources = Array.from(new Set([...(existing.sources || []), ...(member.sources || [])]));
+    return;
+  }
+
+  state.staff.push(member);
 }
 
 function upsertPlayer(player) {
@@ -186,6 +554,40 @@ function parseSquadPage(html, sourceLabel) {
       addIssue(`Camisa de ${name}`, "Jogador sem numero de camisa na tabela do plantel.", sourceLabel);
     }
   });
+
+  parseSquadStaff(doc, clubName, sourceLabel);
+}
+
+function parseSquadStaff(doc, clubName, sourceLabel) {
+  const coachBox = [...doc.querySelectorAll(".box")].find((box) => /Treinador na temporada/i.test(cleanText(box.querySelector(".content-box-headline")?.textContent)));
+  if (!coachBox) {
+    addIssue("Treinador", "Nao encontrei o bloco de treinador na pagina de plantel.", sourceLabel);
+    return;
+  }
+
+  const trainerLink = coachBox.querySelector("a[href*='/profil/trainer/']");
+  const name = cleanText(trainerLink?.textContent || trainerLink?.getAttribute("title"));
+  const profileUrl = trainerLink?.getAttribute("href") || "";
+  const nationality = cleanText(coachBox.querySelector("img.flaggenrahmen[title]")?.getAttribute("title"));
+
+  if (!name) {
+    addIssue("Nome do treinador", "Encontrei o bloco de treinador, mas nao consegui ler o nome.", sourceLabel);
+    return;
+  }
+
+  upsertStaff({
+    role: "Treinador",
+    name,
+    nationality,
+    clubName,
+    trainerId: getTrainerIdFromLink(profileUrl),
+    profileUrl,
+    sources: ["Plantel"],
+  });
+
+  if (!nationality) {
+    addIssue(`Nacionalidade de ${name}`, "A pagina de plantel nao trouxe a nacionalidade do treinador neste HTML.", sourceLabel);
+  }
 }
 
 function parsePlayerPage(html, sourceLabel) {
@@ -266,47 +668,77 @@ function parseMatchPage(html, sourceLabel) {
     addIssue("Escalação", "Nao encontrei os blocos de escalacao da partida.", sourceLabel);
   }
 
-  const formationLabels = [...doc.querySelectorAll(".formation-subtitle")].map((node) => cleanText(node.textContent));
-  formationLabels.forEach((label, index) => {
-    state.events.push({ type: "Formacao", player: "", detail: label, team: index === 0 ? "Mandante" : "Visitante" });
-  });
+  const wantedSide = elements.matchTeamSide.value;
+  const sideNames = ["Mandante", "Visitante"];
+  const wantedIndexes = wantedSide === "both" ? [0, 1] : [wantedSide === "away" ? 1 : 0];
 
-  [...doc.querySelectorAll(".formation-player-container")].forEach((node) => {
-    const playerLink = node.querySelector("a[href*='/profil/spieler/']");
-    const name = cleanText(playerLink?.textContent);
-    const shirtNumber = cleanText(node.querySelector(".tm-shirt-number")?.textContent);
-    const profileUrl = playerLink?.getAttribute("href") || "";
-
-    if (name) {
-      upsertPlayer({
-        name,
-        shirtNumber,
-        transfermarktId: getPlayerIdFromLink(profileUrl),
-        profileUrl,
-        sources: ["Jogo - titular"],
-      });
-    }
-  });
-
-  [...doc.querySelectorAll(".bench-table__tr")].forEach((row) => {
-    const playerLink = row.querySelector("a[href*='/profil/spieler/']");
-    if (!playerLink) {
+  teamBlocks.forEach((block, index) => {
+    if (!wantedIndexes.includes(index)) {
       return;
     }
 
-    const cells = [...row.querySelectorAll("td")];
-    const shirtNumber = cleanText(cells[0]?.textContent);
-    const name = cleanText(playerLink.textContent);
-    const profileUrl = playerLink.getAttribute("href") || "";
-    const position = cleanText(cells[cells.length - 1]?.textContent);
+    const sideName = sideNames[index] || `Time ${index + 1}`;
+    const teamName = cleanText(block.querySelector(".aufstellung-unterueberschrift-mannschaft .sb-vereinslink")?.textContent || block.querySelector(".aufstellung-unterueberschrift-mannschaft img[title]")?.getAttribute("title")) || sideName;
+    const formation = cleanText(block.querySelector(".formation-subtitle")?.textContent);
+    if (formation) {
+      state.events.push({ type: "Formacao", player: "", detail: formation, team: teamName });
+    }
 
-    upsertPlayer({
-      name,
-      shirtNumber,
-      position,
-      transfermarktId: getPlayerIdFromLink(profileUrl),
-      profileUrl,
-      sources: ["Jogo - reserva"],
+    block.querySelectorAll(".formation-player-container").forEach((node) => {
+      const playerLink = node.querySelector("a[href*='/profil/spieler/']");
+      const name = cleanText(playerLink?.textContent);
+      const shirtNumber = cleanText(node.querySelector(".tm-shirt-number")?.textContent);
+      const profileUrl = playerLink?.getAttribute("href") || "";
+
+      if (name) {
+        upsertPlayer({
+          name,
+          shirtNumber,
+          teamName,
+          transfermarktId: getPlayerIdFromLink(profileUrl),
+          profileUrl,
+          sources: [`Jogo - ${sideName} titular`],
+        });
+      }
+    });
+
+    block.querySelectorAll(".bench-table__tr").forEach((row) => {
+      const trainerLink = row.querySelector("a[href*='/profil/trainer/']");
+      if (trainerLink) {
+        const name = cleanText(trainerLink.textContent || trainerLink.getAttribute("title"));
+        const profileUrl = trainerLink.getAttribute("href") || "";
+        upsertStaff({
+          role: "Treinador",
+          name,
+          teamName,
+          trainerId: getTrainerIdFromLink(profileUrl),
+          profileUrl,
+          sources: [`Jogo - ${sideName}`],
+        });
+        addIssue(`Nacionalidade de ${name}`, "A pagina de jogo trouxe o treinador, mas nao trouxe a nacionalidade.", sourceLabel);
+        return;
+      }
+
+      const playerLink = row.querySelector("a[href*='/profil/spieler/']");
+      if (!playerLink) {
+        return;
+      }
+
+      const cells = [...row.querySelectorAll("td")];
+      const shirtNumber = cleanText(cells[0]?.textContent);
+      const name = cleanText(playerLink.textContent);
+      const profileUrl = playerLink.getAttribute("href") || "";
+      const position = cleanText(cells[cells.length - 1]?.textContent);
+
+      upsertPlayer({
+        name,
+        shirtNumber,
+        position,
+        teamName,
+        transfermarktId: getPlayerIdFromLink(profileUrl),
+        profileUrl,
+        sources: [`Jogo - ${sideName} reserva`],
+      });
     });
   });
 
@@ -361,12 +793,14 @@ function parsePesBin(arrayBuffer) {
     const name = readAscii(bytes, base + 0x17, 0x2e);
     const shirtName = readAscii(bytes, base + 0x45, 0x13);
     const internalId = readUint32(bytes, base + 0x58);
+    const position = readPesPosition(bytes, base);
 
     if (name || shirtName || internalId) {
       state.binPlayers.push({
         slot: index + 1,
         name,
         shirtName,
+        position,
         internalId,
         offset: `0x${base.toString(16).toUpperCase()}`,
       });
@@ -390,6 +824,39 @@ function readUint32(bytes, offset) {
   return (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0;
 }
 
+function readPesPosition(bytes, base) {
+  const positionCode = readBitField(bytes, base, 38, 4);
+  const position = PES_POSITION_MAP[positionCode];
+
+  if (!position) {
+    return {
+      code: `Codigo ${positionCode}`,
+      description: "Nao mapeada",
+      value: positionCode,
+      label: `Codigo ${positionCode}`,
+    };
+  }
+
+  return {
+    ...position,
+    value: positionCode,
+    label: `${position.code} - ${position.description}`,
+  };
+}
+
+function readBitField(bytes, base, bitStart, bitLength) {
+  let value = 0;
+
+  for (let index = 0; index < bitLength; index += 1) {
+    const absoluteBit = bitStart + index;
+    const byteValue = bytes[base + Math.floor(absoluteBit / 8)];
+    const bitValue = (byteValue >> (absoluteBit % 8)) & 1;
+    value |= bitValue << index;
+  }
+
+  return value;
+}
+
 function getSelectedPlayers() {
   return state.selectedPlayerKeys
     .map((key) => state.transfermarktPlayers.find((player) => getPlayerKey(player) === key))
@@ -397,13 +864,54 @@ function getSelectedPlayers() {
 }
 
 function describeTransfermarktPlayer(player) {
+  const nationality = getNationalityValidation(player);
   return [
     player.position || player.detailedPosition,
     player.age ? `${player.age} anos` : "",
     player.foot ? `pe ${player.foot}` : "",
     player.height,
     (player.nationalities || []).join(", "),
+    `PES: ${nationality.label}`,
   ].filter(Boolean).join(" | ");
+}
+
+function getSlotGroupClass(slot) {
+  if (slot <= 11) {
+    return "group-starter";
+  }
+  if (slot <= 18) {
+    return "group-bench";
+  }
+  return "group-extra";
+}
+
+function getTransfermarktPesPosition(player) {
+  const sourcePosition = normalizePositionText(player.position || player.detailedPosition || "");
+  const positionMap = [
+    [/goleiro|goalkeeper/, "GK"],
+    [/zagueiro|defensor.*zagueiro|centre.?back|center.?back/, "CB"],
+    [/lateral esquerdo|left.?back/, "LB"],
+    [/lateral direito|right.?back/, "RB"],
+    [/volante|meio campo defensivo|defensive midfield/, "DMF"],
+    [/meio campo central|meia central|central midfield|meio campo$/, "CMF"],
+    [/meia esquerda|left midfield/, "LM"],
+    [/meia direita|right midfield/, "RM"],
+    [/armador|meia ofensivo|attacking midfield/, "AMF"],
+    [/ponta esquerda|left winger/, "LWF"],
+    [/ponta direita|right winger/, "RWF"],
+    [/segundo atacante|second striker/, "SS"],
+    [/centroavante|atacante|centre.?forward|center.?forward/, "CF"],
+  ];
+
+  const match = positionMap.find(([pattern]) => pattern.test(sourcePosition));
+  return match ? match[1] : "";
+}
+
+function normalizePositionText(value) {
+  return cleanText(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
 }
 
 function bindDynamicControls() {
@@ -473,29 +981,38 @@ function render() {
   elements.binPlayerCount.textContent = state.binPlayers.length;
   elements.issueCount.textContent = state.issues.length;
 
-  elements.clubInfo.innerHTML = state.clubPages.length
-    ? state.clubPages.map((item) => `<span class="pill">${escapeHtml(item.type)}</span> ${escapeHtml([item.name, item.season && `Temporada ${item.season}`, item.clubId && `ID ${item.clubId}`].filter(Boolean).join(" - "))}`).join("<br>")
+  const clubInfoLines = [
+    ...state.clubPages.map((item) => `<span class="pill">${escapeHtml(item.type)}</span> ${escapeHtml([item.name, item.season && `Temporada ${item.season}`, item.clubId && `ID ${item.clubId}`].filter(Boolean).join(" - "))}`),
+    ...state.staff.map((item) => `<span class="pill">Equipe técnica</span> ${escapeHtml([item.role, item.name, item.nationality && `Nac. ${item.nationality}`, item.teamName || item.clubName, item.trainerId && `ID ${item.trainerId}`].filter(Boolean).join(" - "))}`),
+  ];
+  elements.clubInfo.innerHTML = clubInfoLines.length
+    ? clubInfoLines.join("<br>")
     : "Nenhuma informação carregada.";
 
-  elements.playersBody.innerHTML = state.transfermarktPlayers.map((player) => `
-    <tr>
-      <td>${escapeHtml(player.shirtNumber || "")}</td>
-      <td>${escapeHtml(player.name || "")}${player.fullName ? `<br><span class="muted">${escapeHtml(player.fullName)}</span>` : ""}</td>
-      <td>${escapeHtml(player.position || player.detailedPosition || "")}</td>
-      <td>${escapeHtml(player.age || "")}${player.birthDate ? `<br><span class="muted">${escapeHtml(player.birthDate)}</span>` : ""}</td>
-      <td>${escapeHtml((player.nationalities || []).join(", "))}</td>
-      <td>${escapeHtml(player.foot || "")}</td>
-      <td>${escapeHtml(player.height || "")}</td>
-      <td>${escapeHtml(player.transfermarktId || "")}${player.profileUrl ? `<br><span class="muted">${escapeHtml(player.profileUrl)}</span>` : ""}</td>
-      <td>${escapeHtml((player.sources || []).join(", "))}</td>
-    </tr>
-  `).join("") || `<tr><td colspan="9" class="muted">Nenhum jogador do Transfermarkt carregado.</td></tr>`;
+  elements.playersBody.innerHTML = state.transfermarktPlayers.map((player) => {
+    const nationality = getNationalityValidation(player);
+    return `
+      <tr>
+        <td>${escapeHtml(player.shirtNumber || "")}</td>
+        <td>${escapeHtml(player.name || "")}${player.fullName ? `<br><span class="muted">${escapeHtml(player.fullName)}</span>` : ""}</td>
+        <td>${escapeHtml(player.position || player.detailedPosition || "")}</td>
+        <td>${escapeHtml(player.age || "")}${player.birthDate ? `<br><span class="muted">${escapeHtml(player.birthDate)}</span>` : ""}</td>
+        <td>${escapeHtml((player.nationalities || []).join(", "))}</td>
+        <td><span class="badge ${nationality.warning ? "warning" : ""}">${escapeHtml(nationality.label)}</span></td>
+        <td>${escapeHtml(player.foot || "")}</td>
+        <td>${escapeHtml(player.height || "")}</td>
+        <td>${escapeHtml(player.transfermarktId || "")}${player.profileUrl ? `<br><span class="muted">${escapeHtml(player.profileUrl)}</span>` : ""}</td>
+        <td>${escapeHtml((player.sources || []).join(", "))}</td>
+      </tr>
+    `;
+  }).join("") || `<tr><td colspan="10" class="muted">Nenhum jogador do Transfermarkt carregado.</td></tr>`;
 
   const selectedPlayers = getSelectedPlayers();
   elements.selectionStatus.textContent = `${selectedPlayers.length}/25 selecionados`;
   elements.selectionBody.innerHTML = state.transfermarktPlayers.map((player) => {
     const key = getPlayerKey(player);
     const checked = state.selectedPlayerKeys.includes(key) ? "checked" : "";
+    const nationality = getNationalityValidation(player);
     return `
       <tr>
         <td class="check-cell"><input type="checkbox" data-select-player="${escapeHtml(key)}" ${checked}></td>
@@ -503,12 +1020,13 @@ function render() {
         <td>${escapeHtml(player.name || "")}${player.fullName ? `<br><span class="muted">${escapeHtml(player.fullName)}</span>` : ""}</td>
         <td>${escapeHtml(player.position || player.detailedPosition || "")}</td>
         <td>${escapeHtml(player.age || "")}</td>
+        <td><span class="badge ${nationality.warning ? "warning" : ""}">${escapeHtml(nationality.label)}</span></td>
         <td>${escapeHtml(player.foot || "")}</td>
         <td>${escapeHtml(player.height || "")}</td>
         <td>${escapeHtml((player.sources || []).join(", "))}</td>
       </tr>
     `;
-  }).join("") || `<tr><td colspan="8" class="muted">Carregue jogadores do Transfermarkt para selecionar os 25.</td></tr>`;
+  }).join("") || `<tr><td colspan="9" class="muted">Carregue jogadores do Transfermarkt para selecionar os 25.</td></tr>`;
 
   const mappedCount = state.mappings.filter((mapping) => mapping.playerKey).length;
   elements.mappingStatus.textContent = `${mappedCount}/25 slots mapeados`;
@@ -517,14 +1035,20 @@ function render() {
     const selectedOptions = selectedPlayers.map((player) => {
       const key = getPlayerKey(player);
       const selected = mapping?.playerKey === key ? "selected" : "";
-      return `<option value="${escapeHtml(key)}" ${selected}>${escapeHtml(player.shirtNumber ? `${player.shirtNumber} - ${player.name}` : player.name)}</option>`;
+      const optionLabel = [
+        player.shirtNumber ? `#${player.shirtNumber}` : "-",
+        getTransfermarktPesPosition(player) || "-",
+        player.name,
+      ].join(" - ");
+      return `<option value="${escapeHtml(key)}" ${selected}>${escapeHtml(optionLabel)}</option>`;
     }).join("");
     const mappedPlayer = selectedPlayers.find((player) => getPlayerKey(player) === mapping?.playerKey);
 
     return `
-      <tr>
+      <tr class="${getSlotGroupClass(binPlayer.slot)}">
         <td>${binPlayer.slot}</td>
         <td>${escapeHtml(binPlayer.name)}<br><span class="muted">${escapeHtml(binPlayer.shirtName)} | ID ${binPlayer.internalId}</span></td>
+        <td>${escapeHtml(binPlayer.position.label)}</td>
         <td>
           <select class="slot-select" data-map-slot="${binPlayer.slot}">
             <option value="">Sem jogador selecionado</option>
@@ -541,10 +1065,11 @@ function render() {
       <td>${player.slot}</td>
       <td>${escapeHtml(player.name)}</td>
       <td>${escapeHtml(player.shirtName)}</td>
+      <td>${escapeHtml(player.position.label)}</td>
       <td>${player.internalId}</td>
       <td>${player.offset}</td>
     </tr>
-  `).join("") || `<tr><td colspan="5" class="muted">Nenhum arquivo PES carregado.</td></tr>`;
+  `).join("") || `<tr><td colspan="6" class="muted">Nenhum arquivo PES carregado.</td></tr>`;
 
   elements.eventsBody.innerHTML = state.events.map((event) => `
     <tr>
@@ -678,6 +1203,7 @@ elements.clearButton.addEventListener("click", () => {
   state.events = [];
   state.issues = [];
   state.clubPages = [];
+  state.staff = [];
   state.selectedPlayerKeys = [];
   state.mappings = [];
   elements.binFile.value = "";

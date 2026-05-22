@@ -229,6 +229,21 @@
       color: #12304f;
     }
 
+    .badge {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #e7f6ec;
+      color: #166534;
+    }
+
+    .badge.warning {
+      background: #fff4ce;
+      color: #7a4d00;
+    }
+
     .toolbar {
       display: flex;
       flex-wrap: wrap;
@@ -258,6 +273,18 @@
     .compact {
       font-size: 12px;
       line-height: 1.4;
+    }
+
+    tr.group-starter td {
+      background: #e8f2ff;
+    }
+
+    tr.group-bench td {
+      background: #eaf8ef;
+    }
+
+    tr.group-extra td {
+      background: #fff8d9;
     }
 
     @media (max-width: 980px) {
@@ -290,6 +317,13 @@
         <option value="match">Página de jogo/final</option>
         <option value="squad">Página de plantel</option>
         <option value="player">Página individual do jogador</option>
+      </select>
+
+      <label for="matchTeamSide">Time na página de jogo</label>
+      <select id="matchTeamSide">
+        <option value="home">Mandante / bloco esquerdo</option>
+        <option value="away">Visitante / bloco direito</option>
+        <option value="both">Ambos os times</option>
       </select>
 
       <label for="urlInput">URL do Transfermarkt</label>
@@ -342,6 +376,7 @@
                   <th>Posição</th>
                   <th>Idade</th>
                   <th>Nac.</th>
+                  <th>Nac. PES</th>
                   <th>Pé</th>
                   <th>Altura</th>
                   <th>ID/Link</th>
@@ -368,6 +403,7 @@
                   <th>Nome</th>
                   <th>Posição</th>
                   <th>Idade</th>
+                  <th>Nac. PES</th>
                   <th>Pé</th>
                   <th>Altura</th>
                   <th>Fonte</th>
@@ -389,6 +425,7 @@
                 <tr>
                   <th>Slot PES</th>
                   <th>Atual no arquivo</th>
+                  <th>Posição PES</th>
                   <th>Novo jogador Transfermarkt</th>
                   <th>Dados que vieram do site</th>
                 </tr>
@@ -406,6 +443,7 @@
                   <th>Slot</th>
                   <th>Nome principal</th>
                   <th>Nome curto</th>
+                  <th>Posição PES</th>
                   <th>ID interno</th>
                   <th>Offset</th>
                 </tr>
