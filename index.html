@@ -6,10 +6,15 @@
   <title>Option File Editor Pro</title>
   <style>
     :root {
-      color-scheme: light;
       font-family: "Segoe UI", Arial, sans-serif;
-      background: #f4f6f8;
       color: #1f2933;
+      background: #eef2f6;
+      --line: #d8dee7;
+      --muted: #5d6978;
+      --blue: #145c9e;
+      --green: #107569;
+      --red: #b42318;
+      --panel: #ffffff;
     }
 
     * {
@@ -19,99 +24,349 @@
     body {
       margin: 0;
       min-height: 100vh;
-      display: grid;
-      place-items: center;
-      padding: 24px;
+      background: #eef2f6;
     }
 
-    main {
-      width: min(620px, 100%);
-      background: #ffffff;
-      border: 1px solid #d9e2ec;
-      border-radius: 8px;
-      padding: 28px;
-      box-shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+    header {
+      background: #09213f;
+      color: #ffffff;
+      padding: 18px 28px;
     }
 
-    h1 {
+    header h1 {
       margin: 0;
-      font-size: 28px;
+      font-size: 22px;
       line-height: 1.2;
     }
 
-    p {
-      margin: 8px 0 24px;
-      color: #52606d;
-      line-height: 1.5;
+    header p {
+      margin: 4px 0 0;
+      color: #c7d7ea;
     }
 
-    input[type="file"] {
-      display: none;
+    main {
+      display: grid;
+      grid-template-columns: 360px minmax(0, 1fr);
+      gap: 18px;
+      padding: 18px;
+    }
+
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: 16px;
+    }
+
+    label {
+      display: block;
+      margin: 12px 0 6px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    input,
+    select,
+    button {
+      font: inherit;
+    }
+
+    input[type="text"],
+    input[type="url"],
+    input[type="file"],
+    select {
+      width: 100%;
+      min-height: 38px;
+      border: 1px solid #bdc8d6;
+      border-radius: 6px;
+      padding: 8px 10px;
+      background: #ffffff;
     }
 
     button {
-      width: 100%;
-      min-height: 48px;
       border: 0;
       border-radius: 6px;
-      background: #1769aa;
+      min-height: 40px;
+      padding: 0 14px;
       color: #ffffff;
-      font-size: 16px;
+      background: var(--blue);
       font-weight: 700;
       cursor: pointer;
     }
 
-    button:hover {
-      background: #155d96;
+    button.secondary {
+      background: #425466;
     }
 
-    output {
-      display: block;
-      margin-top: 22px;
-      padding: 16px;
-      min-height: 78px;
-      border: 1px solid #d9e2ec;
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 14px;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(130px, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
       border-radius: 6px;
+      padding: 10px;
       background: #f8fafc;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 22px;
+      line-height: 1.1;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .tab {
+      background: #d7e4f2;
+      color: #12304f;
+      min-height: 34px;
+    }
+
+    .tab.active {
+      background: var(--blue);
+      color: #ffffff;
+    }
+
+    .panel {
+      display: none;
+    }
+
+    .panel.active {
+      display: block;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #f1f5f9;
+      color: #243b53;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    .table-wrap {
+      max-height: 520px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+    }
+
+    .status {
+      border-left: 4px solid var(--green);
+      background: #ecfdf5;
+      color: #084c41;
+      padding: 10px 12px;
+      border-radius: 6px;
       white-space: pre-wrap;
-      overflow-wrap: anywhere;
-      line-height: 1.5;
+    }
+
+    .status.error {
+      border-left-color: var(--red);
+      background: #fff1f0;
+      color: #7a271a;
+    }
+
+    .muted {
+      color: var(--muted);
+    }
+
+    .pill {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      background: #e4eef8;
+      color: #12304f;
+    }
+
+    @media (max-width: 980px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+
+      .summary {
+        grid-template-columns: repeat(2, minmax(130px, 1fr));
+      }
     }
   </style>
 </head>
 <body>
-  <main>
+  <header>
     <h1>Option File Editor Pro</h1>
-    <p>Carregue qualquer arquivo para iniciar a edicao.</p>
+    <p>Primeira versão de leitura: arquivo PES + dados do Transfermarkt.</p>
+  </header>
 
-    <input id="fileInput" type="file">
-    <button id="loadButton" type="button">Carregar arquivo</button>
-    <output id="fileInfo">Nenhum arquivo carregado.</output>
+  <main>
+    <section>
+      <h2>Entradas</h2>
+
+      <label for="binFile">Arquivo descriptografado do time</label>
+      <input id="binFile" type="file">
+
+      <label for="sourceType">Tipo de página Transfermarkt</label>
+      <select id="sourceType">
+        <option value="auto">Detectar automaticamente</option>
+        <option value="match">Página de jogo/final</option>
+        <option value="squad">Página de plantel</option>
+        <option value="player">Página individual do jogador</option>
+      </select>
+
+      <label for="urlInput">URL do Transfermarkt</label>
+      <input id="urlInput" type="url" placeholder="https://www.transfermarkt.com.br/...">
+
+      <div class="actions">
+        <button id="loadUrlButton" type="button">Ler URL</button>
+        <button id="clearButton" type="button" class="secondary">Limpar</button>
+      </div>
+
+      <label for="htmlFile">Ou carregar HTML salvo</label>
+      <input id="htmlFile" type="file" accept=".html,.htm,text/html">
+
+      <div id="status" class="status" style="margin-top:16px;">Pronto para carregar os arquivos.</div>
+    </section>
+
+    <div class="stack">
+      <section>
+        <h2>Resumo</h2>
+        <div class="summary">
+          <div class="metric"><strong id="clubCount">0</strong><span>clubes/páginas</span></div>
+          <div class="metric"><strong id="playerCount">0</strong><span>jogadores Transfermarkt</span></div>
+          <div class="metric"><strong id="binPlayerCount">0</strong><span>jogadores no arquivo</span></div>
+          <div class="metric"><strong id="issueCount">0</strong><span>alertas de leitura</span></div>
+        </div>
+        <div id="clubInfo" class="muted">Nenhuma informação carregada.</div>
+      </section>
+
+      <section>
+        <div class="tabs">
+          <button class="tab active" data-panel="playersPanel" type="button">Jogadores</button>
+          <button class="tab" data-panel="binPanel" type="button">Arquivo PES</button>
+          <button class="tab" data-panel="eventsPanel" type="button">Jogo</button>
+          <button class="tab" data-panel="issuesPanel" type="button">Alertas</button>
+        </div>
+
+        <div id="playersPanel" class="panel active">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Nome</th>
+                  <th>Posição</th>
+                  <th>Idade</th>
+                  <th>Nac.</th>
+                  <th>Pé</th>
+                  <th>Altura</th>
+                  <th>ID/Link</th>
+                  <th>Fonte</th>
+                </tr>
+              </thead>
+              <tbody id="playersBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="binPanel" class="panel">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Slot</th>
+                  <th>Nome principal</th>
+                  <th>Nome curto</th>
+                  <th>ID interno</th>
+                  <th>Offset</th>
+                </tr>
+              </thead>
+              <tbody id="binBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="eventsPanel" class="panel">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Tipo</th>
+                  <th>Jogador</th>
+                  <th>Detalhe</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
+              <tbody id="eventsBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="issuesPanel" class="panel">
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Campo</th>
+                  <th>Motivo</th>
+                  <th>Fonte</th>
+                </tr>
+              </thead>
+              <tbody id="issuesBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </div>
   </main>
 
-  <script>
-    const fileInput = document.querySelector("#fileInput");
-    const loadButton = document.querySelector("#loadButton");
-    const fileInfo = document.querySelector("#fileInfo");
-
-    loadButton.addEventListener("click", () => {
-      fileInput.click();
-    });
-
-    fileInput.addEventListener("change", () => {
-      const [file] = fileInput.files;
-
-      if (!file) {
-        fileInfo.textContent = "Nenhum arquivo carregado.";
-        return;
-      }
-
-      fileInfo.textContent = [
-        `Nome: ${file.name || "(sem nome)"}`,
-        `Tamanho: ${file.size.toLocaleString("pt-BR")} bytes`,
-        `Tipo: ${file.type || "Nao informado"}`,
-      ].join("\n");
-    });
-  </script>
+  <script src="app.js"></script>
 </body>
 </html>
