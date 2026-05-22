@@ -59,16 +59,18 @@ const PES_PLAYER_COUNT = 25;
 const PES_SHIRT_NUMBERS_OFFSET = 0x30c;
 const TEAM_NAME_OFFSET = 0xe8;
 const TEAM_SHORT_NAME_OFFSET = 0x12e;
+const TEAM_STADIUM_NAME_OFFSET = 0x132;
 const TEAM_COUNTRY_OFFSET = 0x5e;
 const MANAGER_COUNTRY_OFFSET = 0x234;
 const MANAGER_NAME_OFFSET = 0x239;
+const PLAYER_HEIGHT_OFFSET = -0x10;
 const PLAYER_COUNTRY_OFFSET = 0xaa;
 const PLAYER_AGE_BIT = 32;
 const TRANSFERMARKT_BASE_URL = "https://www.transfermarkt.com.br";
 const FIELD_LIMITS = {
   teamName: 60,
   teamShortName: 3,
-  stadiumName: 16,
+  stadiumName: 45,
   managerName: 45,
   playerName: 45,
   playerShirtName: 18,
@@ -849,6 +851,7 @@ function parsePesBin(arrayBuffer) {
     const position = readPesPosition(bytes, base);
     const strongFoot = readPesStrongFoot(bytes, base);
     const shirtNumber = readPesShirtNumber(bytes, index);
+    const height = readPesHeight(bytes, base);
 
     if (name || shirtName || internalId) {
       state.binPlayers.push({
@@ -856,6 +859,7 @@ function parsePesBin(arrayBuffer) {
         name,
         shirtName,
         shirtNumber,
+        height,
         position,
         strongFoot,
         internalId,
@@ -915,6 +919,11 @@ function readPesStrongFoot(bytes, base) {
 function readPesShirtNumber(bytes, index) {
   const offset = PES_SHIRT_NUMBERS_OFFSET + index;
   return offset < bytes.length ? String(bytes[offset] || "") : "";
+}
+
+function readPesHeight(bytes, base) {
+  const offset = base + PLAYER_HEIGHT_OFFSET;
+  return offset >= 0 && offset < bytes.length ? String(bytes[offset] || "") : "";
 }
 
 function readBitField(bytes, base, bitStart, bitLength) {
@@ -1024,6 +1033,20 @@ function getAgeValue(value) {
     return 15;
   }
   return Math.max(15, Math.min(60, numericValue));
+}
+
+function getHeightValue(value) {
+  const normalized = String(value ?? "").replace(",", ".");
+  const decimalMatch = normalized.match(/(\d+(?:\.\d+)?)\s*m/i);
+  if (decimalMatch) {
+    return Math.max(120, Math.min(230, Math.round(Number.parseFloat(decimalMatch[1]) * 100)));
+  }
+
+  const numericValue = Number.parseInt(normalized.replace(/\D/g, ""), 10);
+  if (!Number.isFinite(numericValue)) {
+    return 180;
+  }
+  return Math.max(120, Math.min(230, numericValue));
 }
 
 function getPesNationalityCode(country) {
@@ -1261,6 +1284,7 @@ function getWritePlayerDefaults(binPlayer) {
     position: getTransfermarktPesPosition(mappedPlayer || {}) || binPlayer.position.code || "GK",
     foot: normalizeFootCode(mappedPlayer?.foot || "") || binPlayer.strongFoot?.code || "R",
     age: mappedPlayer?.age || "",
+    height: mappedPlayer?.height ? String(getHeightValue(mappedPlayer.height)) : binPlayer.height || "",
     country: getFirstPesNationality(mappedPlayer?.nationalities || []),
     shirtNumber: mappedPlayer?.shirtNumber || binPlayer.shirtNumber || "",
   };
@@ -1308,6 +1332,7 @@ function renderWritePanel() {
     const position = getWritePlayerValue(binPlayer.slot, "position", defaults.position);
     const foot = getWritePlayerValue(binPlayer.slot, "foot", defaults.foot);
     const age = getWritePlayerValue(binPlayer.slot, "age", defaults.age);
+    const height = getWritePlayerValue(binPlayer.slot, "height", defaults.height);
     const country = getWritePlayerValue(binPlayer.slot, "country", defaults.country);
     const shirtNumber = getWritePlayerValue(binPlayer.slot, "shirtNumber", defaults.shirtNumber);
 
@@ -1319,11 +1344,12 @@ function renderWritePanel() {
         <td><select data-write-player="${binPlayer.slot}" data-write-field="position">${getPositionOptions(position)}</select></td>
         <td><select data-write-player="${binPlayer.slot}" data-write-field="foot">${getFootOptions(foot)}</select></td>
         <td><input data-write-player="${binPlayer.slot}" data-write-field="age" type="number" min="15" max="60" value="${escapeHtml(age)}"></td>
+        <td><input data-write-player="${binPlayer.slot}" data-write-field="height" type="number" min="120" max="230" value="${escapeHtml(height)}"></td>
         <td><select data-write-player="${binPlayer.slot}" data-write-field="country">${getCountryOptions(country)}</select></td>
         <td><input data-write-player="${binPlayer.slot}" data-write-field="shirtNumber" type="number" min="0" max="99" value="${escapeHtml(shirtNumber)}"></td>
       </tr>
     `;
-  }).join("") || `<tr><td colspan="8" class="muted">Carregue o arquivo PES e monte a correspondencia para preparar a gravacao.</td></tr>`;
+  }).join("") || `<tr><td colspan="9" class="muted">Carregue o arquivo PES e monte a correspondencia para preparar a gravacao.</td></tr>`;
 
   const mappedCount = state.mappings.filter((mapping) => mapping.playerKey).length;
   elements.writeStatus.textContent = `${mappedCount}/25 jogadores mapeados para gravacao. Limites: equipe ${FIELD_LIMITS.teamName}, abreviacao ${FIELD_LIMITS.teamShortName}, estadio ${FIELD_LIMITS.stadiumName}, tecnico ${FIELD_LIMITS.managerName}, jogador ${FIELD_LIMITS.playerName}, nome na camisa ${FIELD_LIMITS.playerShirtName}.`;
@@ -1341,6 +1367,7 @@ function saveEditedFile() {
 
   writeAscii(edited, TEAM_NAME_OFFSET, FIELD_LIMITS.teamName + 1, state.writeDraft.team.teamName ?? elements.teamNameInput.value);
   writeAscii(edited, TEAM_SHORT_NAME_OFFSET, FIELD_LIMITS.teamShortName + 1, state.writeDraft.team.teamShortName ?? elements.teamShortNameInput.value);
+  writeAscii(edited, TEAM_STADIUM_NAME_OFFSET, FIELD_LIMITS.stadiumName + 1, state.writeDraft.team.stadiumName ?? elements.stadiumNameInput.value);
   writeAscii(edited, MANAGER_NAME_OFFSET, FIELD_LIMITS.managerName + 1, state.writeDraft.team.managerName ?? elements.managerNameInput.value);
 
   const teamCountryCode = getPesNationalityCode(state.writeDraft.team.teamCountry ?? elements.teamCountrySelect.value);
@@ -1366,6 +1393,7 @@ function saveEditedFile() {
     const foot = getWritePlayerValue(binPlayer.slot, "foot", defaults.foot);
     const shirtNumber = getShirtNumberValue(getWritePlayerValue(binPlayer.slot, "shirtNumber", defaults.shirtNumber));
     const age = getAgeValue(getWritePlayerValue(binPlayer.slot, "age", defaults.age));
+    const height = getHeightValue(getWritePlayerValue(binPlayer.slot, "height", defaults.height));
     const countryCode = getPesNationalityCode(getWritePlayerValue(binPlayer.slot, "country", defaults.country));
 
     writeAscii(edited, base + 0x17, 0x2e, name);
@@ -1373,6 +1401,7 @@ function saveEditedFile() {
     writeBitField(edited, base, 38, 4, getPositionValue(position));
     writeBitField(edited, base, STRONG_FOOT_BIT, 1, foot === "L" ? 1 : 0);
     writeBitField(edited, base, PLAYER_AGE_BIT, 6, age);
+    edited[base + PLAYER_HEIGHT_OFFSET] = height;
     if (countryCode !== null) {
       writeUint16(edited, base + PLAYER_COUNTRY_OFFSET, countryCode);
       writtenCountries += 1;
@@ -1391,7 +1420,7 @@ function saveEditedFile() {
   link.remove();
   URL.revokeObjectURL(link.href);
 
-  setStatus(`Arquivo editado gerado.\nJogadores gravados: ${writtenPlayers}\nPaises de jogadores gravados: ${writtenCountries}\nCampos gravados nesta versao: equipe, abreviacao, tecnico, pais da equipe, pais do tecnico, nome, nome na camisa, posicao, pe forte, idade, pais do jogador e numero da camisa.\nNome do estadio segue preparado na tela, mas ainda sem offset textual confirmado no arquivo.`);
+  setStatus(`Arquivo editado gerado.\nJogadores gravados: ${writtenPlayers}\nPaises de jogadores gravados: ${writtenCountries}\nCampos gravados nesta versao: equipe, abreviacao, estadio, tecnico, pais da equipe, pais do tecnico, nome, nome na camisa, posicao, pe forte, idade, altura, pais do jogador e numero da camisa.`);
 }
 
 function render() {
