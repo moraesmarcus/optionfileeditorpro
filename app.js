@@ -1,0 +1,1683 @@
+const state = {
+  transfermarktPlayers: [],
+  binPlayers: [],
+  binBytes: null,
+  binFileName: "Editado.bin",
+  events: [],
+  issues: [],
+  clubPages: [],
+  staff: [],
+  selectedPlayerKeys: [],
+  mappings: [],
+  writeDraft: {
+    team: {},
+    players: {},
+  },
+};
+
+const elements = {
+  binFile: document.querySelector("#binFile"),
+  htmlFile: document.querySelector("#htmlFile"),
+  sourceType: document.querySelector("#sourceType"),
+  matchTeamSide: document.querySelector("#matchTeamSide"),
+  urlInput: document.querySelector("#urlInput"),
+  loadUrlButton: document.querySelector("#loadUrlButton"),
+  clearButton: document.querySelector("#clearButton"),
+  status: document.querySelector("#status"),
+  clubCount: document.querySelector("#clubCount"),
+  playerCount: document.querySelector("#playerCount"),
+  binPlayerCount: document.querySelector("#binPlayerCount"),
+  issueCount: document.querySelector("#issueCount"),
+  clubInfo: document.querySelector("#clubInfo"),
+  playersBody: document.querySelector("#playersBody"),
+  selectionBody: document.querySelector("#selectionBody"),
+  mappingBody: document.querySelector("#mappingBody"),
+  writePlayersBody: document.querySelector("#writePlayersBody"),
+  teamNameInput: document.querySelector("#teamNameInput"),
+  teamShortNameInput: document.querySelector("#teamShortNameInput"),
+  stadiumNameInput: document.querySelector("#stadiumNameInput"),
+  teamCountrySelect: document.querySelector("#teamCountrySelect"),
+  managerNameInput: document.querySelector("#managerNameInput"),
+  managerCountrySelect: document.querySelector("#managerCountrySelect"),
+  writeStatus: document.querySelector("#writeStatus"),
+  saveEditedFileButton: document.querySelector("#saveEditedFileButton"),
+  binBody: document.querySelector("#binBody"),
+  eventsBody: document.querySelector("#eventsBody"),
+  issuesBody: document.querySelector("#issuesBody"),
+  enrichButton: document.querySelector("#enrichButton"),
+  enrichStatus: document.querySelector("#enrichStatus"),
+  selectFirst25Button: document.querySelector("#selectFirst25Button"),
+  clearSelectionButton: document.querySelector("#clearSelectionButton"),
+  selectionStatus: document.querySelector("#selectionStatus"),
+  mapByOrderButton: document.querySelector("#mapByOrderButton"),
+  mappingStatus: document.querySelector("#mappingStatus"),
+};
+
+const PES_PLAYER_START = 0x850;
+const PES_PLAYER_SIZE = 0xbc;
+const PES_PLAYER_COUNT = 25;
+const PES_SHIRT_NUMBERS_OFFSET = 0x30c;
+const TEAM_NAME_OFFSET = 0xe8;
+const TEAM_SHORT_NAME_OFFSET = 0x12e;
+const TEAM_STADIUM_NAME_OFFSET = 0x132;
+const TEAM_COUNTRY_OFFSET = 0x5e;
+const MANAGER_COUNTRY_OFFSET = 0x234;
+const MANAGER_NAME_OFFSET = 0x239;
+const PLAYER_HEIGHT_OFFSET = -0x10;
+const PLAYER_COUNTRY_OFFSET = 0xaa;
+const PLAYER_AGE_BIT = 32;
+const TRANSFERMARKT_BASE_URL = "https://www.transfermarkt.com.br";
+const FIELD_LIMITS = {
+  teamName: 60,
+  teamShortName: 3,
+  stadiumName: 45,
+  managerName: 45,
+  playerName: 45,
+  playerShirtName: 18,
+};
+const STRONG_FOOT_BIT = 147;
+const STRONG_FOOT_MAP = {
+  L: "Esquerdo",
+  R: "Direito",
+};
+const PES_NATIONALITY_CODE_OVERRIDES = {
+  ARGENTINA: 144,
+  ECUADOR: 149,
+  TOGO: 91,
+  URUGUAY: 152,
+};
+const PES_POSITION_MAP = {
+  0: { code: "GK", description: "Goleiro" },
+  1: { code: "CB", description: "Zagueiro" },
+  2: { code: "LB", description: "Lateral Esquerdo" },
+  3: { code: "RB", description: "Lateral Direito" },
+  4: { code: "DMF", description: "Volante" },
+  5: { code: "CMF", description: "Meio Campo" },
+  6: { code: "LM", description: "Meia Esquerda" },
+  7: { code: "RM", description: "Meia Direita" },
+  8: { code: "AMF", description: "Armador" },
+  9: { code: "LWF", description: "Ponta Esquerda" },
+  10: { code: "RWF", description: "Ponta Direita" },
+  11: { code: "SS", description: "Segundo Atacante" },
+  12: { code: "CF", description: "Centroavante" },
+};
+
+const PES_NATIONALITIES = `AFGHANISTAN
+BAHRAIN
+BANGLADESH
+BHUTAN
+BRUNEI
+CAMBODIA
+CHINA
+HONG KONG
+INDIA
+INDONESIA
+IRAN
+IRAQ
+JAPAN
+JORDAN
+NORTH KOREA
+SOUTH KOREA
+KUWAIT
+LAOS
+LEBANON
+MACAO
+MALAYSIA
+MALDIVES
+MONGOLIA
+MYANMAR
+NEPAL
+OMAN
+PAKISTAN
+PALESTINE
+PHILIPPINES
+QATAR
+SAUDI ARABIA
+SINGAPORE
+SRI LANKA
+SYRIA
+THAILAND
+UAE
+VIETNAM
+YEMEN
+KYRGYZ REPUBLIC
+TAJIKISTAN
+TURKMENISTAN
+EAST TIMOR
+ALGERIA
+ANGOLA
+BENIN
+BOTSWANA
+BURKINA FASO
+BURUNDI
+CAMEROON
+CAPE VERDE
+CENTRAL AFRICAN REP.
+CHAD
+THE COMOROS
+CONGO DR
+COTE D'IVOIRE
+DJIBOUTI
+EGYPT
+EQUATORIAL GUINEA
+ERITREA
+ETHIOPIA
+GABON
+REPUBLIC OF THE GAMBIA
+GHANA
+GUINEA
+GUINEA-BISSAU
+KENYA
+LESOTHO
+LIBERIA
+LIBYA
+MADAGASCAR
+MALAWI
+MALI
+MAURITANIA
+MAURITIUS
+MOROCCO
+MOZAMBIQUE
+NAMIBIA
+NIGER
+NIGERIA
+RWANDA
+SAO TOME AND PRINCIPE
+SENEGAL
+SEYCHELLES
+SIERRA LEONE
+SOMALIA
+SOUTH AFRICA
+SUDAN
+SWAZILAND
+TANZANIA
+TOGO
+TUNISIA
+UGANDA
+ZAMBIA
+ZIMBABWE
+CONGO
+REUNION
+ANGUILLA
+ANTIGUA AND BARBUDA
+ARUBA
+THE BAHAMAS
+BARBADOS
+BELIZE
+BERMUDA
+CANADA
+CAYMAN ISLANDS
+COSTA RICA
+CUBA
+DOMINICA
+DOMINICAN REPUBLIC
+EL SALVADOR
+GRENADA
+GUADELOUPE
+GUATEMALA
+HAITI
+HONDURAS
+JAMAICA
+MARTINIQUE
+MEXICO
+MONTSERRAT
+NETHERLANDS ANTILLES
+NICARAGUA
+PANAMA
+PUERTO RICO
+SAINT KITTS AND NEVIS
+SAINT LUCIA
+ST VINCENT & GRENADINES
+TRINIDAD AND TOBAGO
+TURKS AND CAICOS IS.
+UNITED STATES
+BRITISH VIRGIN ISLANDS
+U.S. VIRGIN ISLANDS
+FRENCH GUIANA
+SURINAME
+CURACAO
+ARGENTINA
+BOLIVIA
+BRAZIL
+CHILE
+COLOMBIA
+ECUADOR
+PARAGUAY
+PERU
+URUGUAY
+VENEZUELA
+GUYANA
+AMERICAN SAMOA
+AUSTRALIA
+COOK ISLANDS
+FIJI
+NEW CALEDONIA
+NEW ZEALAND
+PAPUA NEW GUINEA
+SAMOA
+SOLOMON ISLANDS
+TAHITI
+TONGA
+VANUATU
+GUAM
+PALAU
+ISRAEL
+TURKEY
+ALBANIA
+ANDORRA
+ARMENIA
+AUSTRIA
+AZERBAIJAN
+BELARUS
+BELGIUM
+BOSNIA AND HERZEGOVINA
+BULGARIA
+CROATIA
+CYPRUS
+CZECH REPUBLIC
+DENMARK
+ENGLAND
+ESTONIA
+FAROE ISLANDS
+FINLAND
+FRANCE
+GEORGIA
+GERMANY
+GREECE
+HUNGARY
+ICELAND
+IRELAND
+ITALY
+KAZAKHSTAN
+LATVIA
+LIECHTENSTEIN
+LITHUANIA
+LUXEMBOURG
+MACEDONIA
+MALTA
+MOLDOVA
+NETHERLANDS
+NORTHERN IRELAND
+NORWAY
+POLAND
+PORTUGAL
+ROMANIA
+RUSSIA
+SAN MARINO
+SCOTLAND
+SLOVAKIA
+SLOVENIA
+SPAIN
+SWEDEN
+SWITZERLAND
+UKRAINE
+UZBEKISTAN
+WALES
+GIBRALTAR
+MONACO
+OTHERS
+TAIWAN
+SERBIA
+MONTENEGRO
+SINT MAARTEN
+KOSOVO
+SOUTH SUDAN`.split("\n");
+
+const PES_NATIONALITY_SET = new Set(PES_NATIONALITIES.map(normalizeCountryName));
+const NATIONALITY_ALIASES = {
+  "ALEMANHA": "GERMANY",
+  "ARGELIA": "ALGERIA",
+  "ARMENIA": "ARMENIA",
+  "AUSTRALIA": "AUSTRALIA",
+  "AUSTRIA": "AUSTRIA",
+  "BELGICA": "BELGIUM",
+  "BOLIVIA": "BOLIVIA",
+  "BRASIL": "BRAZIL",
+  "CAMAROES": "CAMEROON",
+  "CANADA": "CANADA",
+  "CHILE": "CHILE",
+  "CHINA": "CHINA",
+  "COLOMBIA": "COLOMBIA",
+  "COREIA DO NORTE": "NORTH KOREA",
+  "COREIA DO SUL": "SOUTH KOREA",
+  "COSTA RICA": "COSTA RICA",
+  "CROACIA": "CROATIA",
+  "DINAMARCA": "DENMARK",
+  "EGITO": "EGYPT",
+  "EQUADOR": "ECUADOR",
+  "ESCOCIA": "SCOTLAND",
+  "ESLOVAQUIA": "SLOVAKIA",
+  "ESLOVENIA": "SLOVENIA",
+  "ESPANHA": "SPAIN",
+  "ESTADOS UNIDOS": "UNITED STATES",
+  "FINLANDIA": "FINLAND",
+  "FRANCA": "FRANCE",
+  "GALES": "WALES",
+  "GRECIA": "GREECE",
+  "HOLANDA": "NETHERLANDS",
+  "HUNGRIA": "HUNGARY",
+  "INGLATERRA": "ENGLAND",
+  "IRLANDA": "IRELAND",
+  "IRLANDA DO NORTE": "NORTHERN IRELAND",
+  "ISLANDIA": "ICELAND",
+  "ITALIA": "ITALY",
+  "JAPAO": "JAPAN",
+  "MARROCOS": "MOROCCO",
+  "MEXICO": "MEXICO",
+  "NORUEGA": "NORWAY",
+  "NOVA ZELANDIA": "NEW ZEALAND",
+  "PANAMA": "PANAMA",
+  "PARAGUAI": "PARAGUAY",
+  "PAIS DE GALES": "WALES",
+  "PAISES BAIXOS": "NETHERLANDS",
+  "PERU": "PERU",
+  "POLONIA": "POLAND",
+  "PORTUGAL": "PORTUGAL",
+  "REPUBLICA TCHECA": "CZECH REPUBLIC",
+  "ROMENIA": "ROMANIA",
+  "RUSSIA": "RUSSIA",
+  "SERVIA": "SERBIA",
+  "SUECIA": "SWEDEN",
+  "SUICA": "SWITZERLAND",
+  "TOGO": "TOGO",
+  "TURQUIA": "TURKEY",
+  "UCRANIA": "UKRAINE",
+  "URUGUAI": "URUGUAY",
+  "VENEZUELA": "VENEZUELA",
+};
+
+function setStatus(message, isError = false) {
+  elements.status.textContent = message;
+  elements.status.classList.toggle("error", isError);
+}
+
+function decodeHtmlText(value) {
+  const textarea = document.createElement("textarea");
+  textarea.innerHTML = value || "";
+  return textarea.value.replace(/\s+/g, " ").trim();
+}
+
+function cleanText(value) {
+  return decodeHtmlText(value || "").replace(/\u00a0/g, " ").trim();
+}
+
+function normalizeCountryName(value) {
+  return cleanText(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[’']/g, "'")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+function getPesNationalityName(value) {
+  const normalized = normalizeCountryName(value);
+  const alias = NATIONALITY_ALIASES[normalized] || normalized;
+  return PES_NATIONALITY_SET.has(alias) ? alias : "";
+}
+
+function getNationalityValidation(player) {
+  const nationalities = player.nationalities || [];
+  if (!nationalities.length) {
+    return { label: "Nao lida", warning: true };
+  }
+
+  const firstNationality = nationalities[0];
+  const pesName = getPesNationalityName(firstNationality);
+  if (!pesName) {
+    return {
+      label: `Fora da lista: ${firstNationality}`,
+      warning: true,
+    };
+  }
+
+  return {
+    label: nationalities.length > 1 ? `${pesName} (1a nacionalidade)` : pesName,
+    warning: false,
+  };
+}
+
+function stripTags(value) {
+  return cleanText((value || "").replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " "));
+}
+
+function getPlayerIdFromLink(link) {
+  const match = (link || "").match(/\/spieler\/(\d+)/);
+  return match ? match[1] : "";
+}
+
+function getPlayerKey(player) {
+  return player.transfermarktId || player.profileUrl || player.name;
+}
+
+function absoluteTransfermarktUrl(link) {
+  if (!link) {
+    return "";
+  }
+  if (/^https?:\/\//i.test(link)) {
+    return link;
+  }
+  if (link.startsWith("/")) {
+    return `${TRANSFERMARKT_BASE_URL}${link}`;
+  }
+  return `${TRANSFERMARKT_BASE_URL}/${link}`;
+}
+
+function getClubIdFromUrl(url) {
+  const match = (url || "").match(/\/verein\/(\d+)/);
+  return match ? match[1] : "";
+}
+
+function normalizeSourceType(html, selectedType) {
+  if (selectedType !== "auto") {
+    return selectedType;
+  }
+  if (/spielbericht\/index|Onze inicial|Sistema t.tico|bench-table/i.test(html)) {
+    return "match";
+  }
+  if (/Plantel|rueckennummer|Nasc\.\/Idade|Valor de mercado/i.test(html)) {
+    return "squad";
+  }
+  if (/Nome no pa.s de origem|Posi..o detalhada|info-table|data-header__headline-wrapper/i.test(html)) {
+    return "player";
+  }
+  return "unknown";
+}
+
+function addIssue(field, reason, source) {
+  state.issues.push({ field, reason, source });
+}
+
+function cleanPlayerName(value) {
+  return cleanText(value).replace(/^(?:\d+[\s.)-]+)+/, "").trim();
+}
+
+function getTrainerIdFromLink(link) {
+  const match = (link || "").match(/\/trainer\/(\d+)/);
+  return match ? match[1] : "";
+}
+
+function upsertStaff(member) {
+  if (member.profileUrl) {
+    member.profileUrl = absoluteTransfermarktUrl(member.profileUrl);
+  }
+
+  const key = member.trainerId || member.profileUrl || `${member.role}:${member.name}`;
+  const existing = state.staff.find((item) => (item.trainerId || item.profileUrl || `${item.role}:${item.name}`) === key);
+
+  if (existing) {
+    Object.entries(member).forEach(([field, value]) => {
+      if (value !== undefined && value !== null && value !== "" && (!Array.isArray(value) || value.length)) {
+        existing[field] = value;
+      }
+    });
+    existing.sources = Array.from(new Set([...(existing.sources || []), ...(member.sources || [])]));
+    return;
+  }
+
+  state.staff.push(member);
+}
+
+function upsertPlayer(player) {
+  if (player.name) {
+    player.name = cleanPlayerName(player.name);
+  }
+  if (player.fullName) {
+    player.fullName = cleanPlayerName(player.fullName);
+  }
+
+  if (player.profileUrl) {
+    player.profileUrl = absoluteTransfermarktUrl(player.profileUrl);
+  }
+
+  const key = getPlayerKey(player);
+  const existing = state.transfermarktPlayers.find((item) => getPlayerKey(item) === key);
+
+  if (existing) {
+    Object.entries(player).forEach(([field, value]) => {
+      if (value !== undefined && value !== null && value !== "" && (!Array.isArray(value) || value.length)) {
+        existing[field] = value;
+      }
+    });
+    existing.sources = Array.from(new Set([...(existing.sources || []), ...(player.sources || [])]));
+    return;
+  }
+
+  state.transfermarktPlayers.push(player);
+}
+
+function parseDocument(html) {
+  return new DOMParser().parseFromString(html, "text/html");
+}
+
+function parseSquadPage(html, sourceLabel) {
+  const doc = parseDocument(html);
+  const title = cleanText(doc.querySelector("meta[property='og:title']")?.content || doc.title);
+  const clubName = title.replace(/\s+-\s+Perfil do clube.*$/i, "");
+  const clubId = getClubIdFromUrl(doc.querySelector("meta[property='og:url']")?.content || "");
+  const season = cleanText(doc.querySelector("h2.content-box-headline")?.textContent || "").match(/Temporada\s+(\d{4})/)?.[1] || "";
+
+  state.clubPages.push({ type: "Plantel", name: clubName, clubId, season, source: sourceLabel });
+
+  const rows = [...doc.querySelectorAll("table.items tbody tr")];
+  if (!rows.length) {
+    addIssue("Plantel", "Nao encontrei a tabela de jogadores no HTML.", sourceLabel);
+    return;
+  }
+
+  rows.forEach((row) => {
+    const shirtNumber = cleanText(row.querySelector(".rn_nummer")?.textContent);
+    const shirtTitle = cleanText(row.querySelector(".rueckennummer")?.getAttribute("title"));
+    const playerLink = row.querySelector("td.hauptlink a[href*='/profil/spieler/']");
+    const name = cleanText(playerLink?.textContent);
+    const profileUrl = playerLink?.getAttribute("href") || "";
+    const transfermarktId = getPlayerIdFromLink(profileUrl);
+    const position = cleanText(row.querySelector(".inline-table tr:nth-child(2) td")?.textContent) || shirtTitle;
+    const cells = [...row.children];
+    const birthAge = cleanText(cells[2]?.textContent);
+    const birthDate = birthAge.match(/\d{2}\/\d{2}\/\d{4}/)?.[0] || "";
+    const age = birthAge.match(/\((\d+)\)/)?.[1] || "";
+    const nationalities = [...(cells[3]?.querySelectorAll("img[title]") || [])].map((img) => cleanText(img.getAttribute("title"))).filter(Boolean);
+    const currentClub = cleanText(cells[4]?.querySelector("img[title]")?.getAttribute("title") || cells[4]?.textContent);
+    const marketValue = cleanText(cells[5]?.textContent);
+
+    if (!name) {
+      addIssue("Nome do jogador", "Linha do plantel sem link/nome de jogador.", sourceLabel);
+      return;
+    }
+
+    upsertPlayer({
+      shirtNumber,
+      name,
+      position,
+      birthDate,
+      age,
+      nationalities,
+      currentClub,
+      marketValue,
+      transfermarktId,
+      profileUrl,
+      sources: ["Plantel"],
+    });
+
+    if (!shirtNumber || shirtNumber === "-") {
+      addIssue(`Camisa de ${name}`, "Jogador sem numero de camisa na tabela do plantel.", sourceLabel);
+    }
+  });
+
+  parseSquadStaff(doc, clubName, sourceLabel);
+}
+
+function parseSquadStaff(doc, clubName, sourceLabel) {
+  const coachBox = [...doc.querySelectorAll(".box")].find((box) => /Treinador na temporada/i.test(cleanText(box.querySelector(".content-box-headline")?.textContent)));
+  if (!coachBox) {
+    addIssue("Treinador", "Nao encontrei o bloco de treinador na pagina de plantel.", sourceLabel);
+    return;
+  }
+
+  const trainerLink = coachBox.querySelector("a[href*='/profil/trainer/']");
+  const name = cleanText(trainerLink?.textContent || trainerLink?.getAttribute("title"));
+  const profileUrl = trainerLink?.getAttribute("href") || "";
+  const nationality = cleanText(coachBox.querySelector("img.flaggenrahmen[title]")?.getAttribute("title"));
+
+  if (!name) {
+    addIssue("Nome do treinador", "Encontrei o bloco de treinador, mas nao consegui ler o nome.", sourceLabel);
+    return;
+  }
+
+  upsertStaff({
+    role: "Treinador",
+    name,
+    nationality,
+    clubName,
+    trainerId: getTrainerIdFromLink(profileUrl),
+    profileUrl,
+    sources: ["Plantel"],
+  });
+
+  if (!nationality) {
+    addIssue(`Nacionalidade de ${name}`, "A pagina de plantel nao trouxe a nacionalidade do treinador neste HTML.", sourceLabel);
+  }
+}
+
+function parsePlayerPage(html, sourceLabel) {
+  const doc = parseDocument(html);
+  const titleName = cleanText(doc.querySelector("h1.data-header__headline-wrapper")?.textContent || doc.querySelector("meta[property='og:title']")?.content);
+  const canonical = doc.querySelector("link[rel='canonical']")?.href || doc.querySelector("meta[property='og:url']")?.content || "";
+  const transfermarktId = getPlayerIdFromLink(canonical);
+  const header = doc.querySelector(".data-header");
+  const headerText = header ? cleanText(header.textContent) : "";
+
+  const fullName = getInfoTableValue(doc, "Nome no país de origem:");
+  const birthAge = getInfoTableValue(doc, "Nasc./Idade:") || headerText.match(/\d{2}\/\d{2}\/\d{4}\s+\(\d+\)/)?.[0] || "";
+  const birthDate = birthAge.match(/\d{2}\/\d{2}\/\d{4}/)?.[0] || "";
+  const age = birthAge.match(/\((\d+)\)/)?.[1] || "";
+  const birthPlace = getInfoTableValue(doc, "Local de nascimento:");
+  const height = getInfoTableValue(doc, "Altura:");
+  const nationality = getInfoTableValue(doc, "Nacionalidade:");
+  const detailedPosition = getInfoTableValue(doc, "Posição:");
+  const foot = getInfoTableValue(doc, "Pé:");
+  const currentClub = getInfoTableValue(doc, "Clube atual:");
+  const mainPosition = cleanText(doc.querySelector(".detail-position__position")?.textContent);
+
+  if (!titleName) {
+    addIssue("Nome do jogador", "Nao encontrei o nome principal na pagina individual.", sourceLabel);
+  }
+
+  upsertPlayer({
+    name: titleName,
+    fullName,
+    position: mainPosition || detailedPosition,
+    detailedPosition,
+    birthDate,
+    age,
+    birthPlace,
+    height,
+    nationalities: nationality ? [nationality] : [],
+    foot,
+    currentClub,
+    transfermarktId,
+    profileUrl: canonical,
+    sources: ["Jogador"],
+  });
+
+  ["Pé", "Altura", "Posição"].forEach((field) => {
+    const value = { "Pé": foot, Altura: height, "Posição": mainPosition || detailedPosition }[field];
+    if (!value) {
+      addIssue(`${field} de ${titleName || transfermarktId || "jogador"}`, "Campo nao encontrado na pagina individual.", sourceLabel);
+    }
+  });
+}
+
+function getInfoTableValue(doc, label) {
+  const cells = [...doc.querySelectorAll(".info-table__content")];
+  const wanted = normalizeLabel(label);
+  for (let index = 0; index < cells.length - 1; index += 1) {
+    if (normalizeLabel(cells[index].textContent) === wanted) {
+      return cleanText(cells[index + 1].textContent);
+    }
+  }
+  return "";
+}
+
+function normalizeLabel(value) {
+  return cleanText(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9/]+/gi, "")
+    .toLowerCase();
+}
+
+function parseMatchPage(html, sourceLabel) {
+  const doc = parseDocument(html);
+  const title = cleanText(doc.querySelector("meta[property='og:title']")?.content || doc.title);
+  state.clubPages.push({ type: "Jogo", name: title, source: sourceLabel });
+
+  const tacticalBox = [...doc.querySelectorAll(".box")].find((box) => /Sistema/i.test(cleanText(box.querySelector(".content-box-headline")?.textContent)) && box.querySelector(".formation-player-container"));
+  const teamBlocks = tacticalBox
+    ? [...tacticalBox.children].filter((child) => child.classList.contains("large-6") && child.classList.contains("columns"))
+    : [...doc.querySelectorAll(".aufstellung-box")];
+  if (!teamBlocks.length) {
+    addIssue("Escalação", "Nao encontrei os blocos de escalacao da partida.", sourceLabel);
+  }
+
+  const wantedSide = elements.matchTeamSide.value;
+  const sideNames = ["Mandante", "Visitante"];
+  const wantedIndexes = wantedSide === "both" ? [0, 1] : [wantedSide === "away" ? 1 : 0];
+
+  teamBlocks.forEach((block, index) => {
+    if (!wantedIndexes.includes(index)) {
+      return;
+    }
+
+    const sideName = sideNames[index] || `Time ${index + 1}`;
+    const teamName = cleanText(block.querySelector(".aufstellung-unterueberschrift-mannschaft .sb-vereinslink")?.textContent || block.querySelector(".aufstellung-unterueberschrift-mannschaft img[title]")?.getAttribute("title")) || sideName;
+    const formation = cleanText(block.querySelector(".formation-subtitle")?.textContent);
+    if (formation) {
+      state.events.push({ type: "Formacao", player: "", detail: formation, team: teamName });
+    }
+
+    block.querySelectorAll(".formation-player-container").forEach((node) => {
+      const playerLink = node.querySelector("a[href*='/profil/spieler/']");
+      const name = cleanText(playerLink?.textContent);
+      const shirtNumber = cleanText(node.querySelector(".tm-shirt-number")?.textContent);
+      const profileUrl = playerLink?.getAttribute("href") || "";
+
+      if (name) {
+        upsertPlayer({
+          name,
+          shirtNumber,
+          teamName,
+          transfermarktId: getPlayerIdFromLink(profileUrl),
+          profileUrl,
+          sources: [`Jogo - ${sideName} titular`],
+        });
+      }
+    });
+
+    block.querySelectorAll("table.ersatzbank tr").forEach((row) => {
+      const trainerLink = row.querySelector("a[href*='/profil/trainer/']");
+      if (trainerLink) {
+        const name = cleanText(trainerLink.textContent || trainerLink.getAttribute("title"));
+        const profileUrl = trainerLink.getAttribute("href") || "";
+        upsertStaff({
+          role: "Treinador",
+          name,
+          teamName,
+          trainerId: getTrainerIdFromLink(profileUrl),
+          profileUrl,
+          sources: [`Jogo - ${sideName}`],
+        });
+        addIssue(`Nacionalidade de ${name}`, "A pagina de jogo trouxe o treinador, mas nao trouxe a nacionalidade.", sourceLabel);
+        return;
+      }
+
+      const playerLink = row.querySelector("a[href*='/profil/spieler/']");
+      if (!playerLink) {
+        return;
+      }
+
+      const cells = [...row.querySelectorAll("td")];
+      const shirtNumber = cleanText(row.querySelector(".tm-shirt-number--small")?.textContent || cells[0]?.textContent);
+      const name = cleanText(playerLink.textContent);
+      const profileUrl = playerLink.getAttribute("href") || "";
+      const position = cleanText(cells[cells.length - 1]?.textContent);
+
+      upsertPlayer({
+        name,
+        shirtNumber,
+        position,
+        teamName,
+        transfermarktId: getPlayerIdFromLink(profileUrl),
+        profileUrl,
+        sources: [`Jogo - ${sideName} reserva`],
+      });
+    });
+  });
+
+  [...doc.querySelectorAll(".sb-aktion")].forEach((eventNode) => {
+    const text = stripTags(eventNode.innerHTML);
+    const playerLink = eventNode.querySelector("a[href*='/spieler/']");
+    const player = cleanText(playerLink?.textContent);
+    const team = cleanText(eventNode.querySelector(".sb-aktion-wappen img[title]")?.getAttribute("title"));
+    let type = "Evento";
+    if (/Cart.o amarelo/i.test(text)) type = "Cartao";
+    if (/gol|Chute|Cabeceio/i.test(text)) type = "Gol";
+    if (/wechsel|Sem mais detalhes|sb-ein|sb-aus/i.test(eventNode.innerHTML)) type = "Substituicao";
+
+    if (player || text) {
+      state.events.push({ type, player, detail: text, team });
+    }
+  });
+}
+
+function parseTransfermarktHtml(html, sourceLabel) {
+  const type = normalizeSourceType(html, elements.sourceType.value);
+
+  if (type === "squad") {
+    parseSquadPage(html, sourceLabel);
+  } else if (type === "player") {
+    parsePlayerPage(html, sourceLabel);
+  } else if (type === "match") {
+    parseMatchPage(html, sourceLabel);
+  } else {
+    addIssue("Tipo de pagina", "Nao consegui detectar se o HTML e de jogo, plantel ou jogador.", sourceLabel);
+  }
+
+  render();
+}
+
+function parsePesBin(arrayBuffer) {
+  const bytes = new Uint8Array(arrayBuffer);
+  state.binBytes = new Uint8Array(bytes);
+  state.binPlayers = [];
+
+  if (bytes.length < PES_PLAYER_START + PES_PLAYER_SIZE) {
+    addIssue("Arquivo PES", "Arquivo menor que o esperado para conter registros de jogadores.", "Arquivo PES");
+    render();
+    return;
+  }
+
+  for (let index = 0; index < PES_PLAYER_COUNT; index += 1) {
+    const base = PES_PLAYER_START + index * PES_PLAYER_SIZE;
+    if (base + PES_PLAYER_SIZE > bytes.length) {
+      break;
+    }
+
+    const name = readAscii(bytes, base + 0x17, 0x2e);
+    const shirtName = readAscii(bytes, base + 0x45, 0x13);
+    const internalId = readUint32(bytes, base + 0x58);
+    const position = readPesPosition(bytes, base);
+    const strongFoot = readPesStrongFoot(bytes, base);
+    const shirtNumber = readPesShirtNumber(bytes, index);
+    const height = readPesHeight(bytes, base);
+
+    if (name || shirtName || internalId) {
+      state.binPlayers.push({
+        slot: index + 1,
+        name,
+        shirtName,
+        shirtNumber,
+        height,
+        position,
+        strongFoot,
+        internalId,
+        offset: `0x${base.toString(16).toUpperCase()}`,
+      });
+    }
+  }
+
+  render();
+  setStatus(`Arquivo PES lido com ${state.binPlayers.length} jogadores encontrados.`);
+}
+
+function readAscii(bytes, start, length) {
+  let end = start;
+  const limit = Math.min(start + length, bytes.length);
+  while (end < limit && bytes[end] !== 0) {
+    end += 1;
+  }
+  return new TextDecoder("latin1").decode(bytes.slice(start, end)).trim();
+}
+
+function readUint32(bytes, offset) {
+  return (bytes[offset] | (bytes[offset + 1] << 8) | (bytes[offset + 2] << 16) | (bytes[offset + 3] << 24)) >>> 0;
+}
+
+function readPesPosition(bytes, base) {
+  const positionCode = readBitField(bytes, base, 38, 4);
+  const position = PES_POSITION_MAP[positionCode];
+
+  if (!position) {
+    return {
+      code: `Codigo ${positionCode}`,
+      description: "Nao mapeada",
+      value: positionCode,
+      label: `Codigo ${positionCode}`,
+    };
+  }
+
+  return {
+    ...position,
+    value: positionCode,
+    label: `${position.code} - ${position.description}`,
+  };
+}
+
+function readPesStrongFoot(bytes, base) {
+  const value = readBitField(bytes, base, STRONG_FOOT_BIT, 1);
+  const code = value ? "L" : "R";
+  return {
+    code,
+    value,
+    description: STRONG_FOOT_MAP[code],
+    label: `${code} - ${STRONG_FOOT_MAP[code]}`,
+  };
+}
+
+function readPesShirtNumber(bytes, index) {
+  const offset = PES_SHIRT_NUMBERS_OFFSET + index;
+  return offset < bytes.length ? String(bytes[offset] || "") : "";
+}
+
+function readPesHeight(bytes, base) {
+  const offset = base + PLAYER_HEIGHT_OFFSET;
+  return offset >= 0 && offset < bytes.length ? String(bytes[offset] || "") : "";
+}
+
+function readBitField(bytes, base, bitStart, bitLength) {
+  let value = 0;
+
+  for (let index = 0; index < bitLength; index += 1) {
+    const absoluteBit = bitStart + index;
+    const byteValue = bytes[base + Math.floor(absoluteBit / 8)];
+    const bitValue = (byteValue >> (absoluteBit % 8)) & 1;
+    value |= bitValue << index;
+  }
+
+  return value;
+}
+
+function writeBitField(bytes, base, bitStart, bitLength, value) {
+  for (let index = 0; index < bitLength; index += 1) {
+    const absoluteBit = bitStart + index;
+    const byteIndex = base + Math.floor(absoluteBit / 8);
+    const mask = 1 << (absoluteBit % 8);
+    if ((value >> index) & 1) {
+      bytes[byteIndex] |= mask;
+    } else {
+      bytes[byteIndex] &= ~mask;
+    }
+  }
+}
+
+function writeAscii(bytes, start, length, value) {
+  const normalized = toPesUpper(value).slice(0, length - 1);
+  bytes.fill(0, start, start + length);
+  for (let index = 0; index < normalized.length; index += 1) {
+    bytes[start + index] = normalized.charCodeAt(index) & 0xff;
+  }
+}
+
+function writeUint16(bytes, offset, value) {
+  if (!Number.isFinite(value) || offset + 1 >= bytes.length) {
+    return;
+  }
+  bytes[offset] = value & 0xff;
+  bytes[offset + 1] = (value >> 8) & 0xff;
+}
+
+function normalizeEditableText(value, { trim = true } = {}) {
+  const normalized = decodeHtmlText(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9 .'/-]/g, "")
+    .replace(/\s+/g, " ");
+
+  return trim ? normalized.trim() : normalized;
+}
+
+function toPesUpper(value) {
+  return normalizeEditableText(value).toUpperCase();
+}
+
+function toPesUpperInput(value, limit) {
+  return normalizeEditableText(value, { trim: false }).toUpperCase().slice(0, limit);
+}
+
+function fitText(value, limit) {
+  const normalized = toPesUpper(value);
+  if (normalized.length <= limit) {
+    return normalized;
+  }
+  return abbreviateName(normalized, limit);
+}
+
+function abbreviateName(value, limit) {
+  const parts = toPesUpper(value).split(" ").filter(Boolean);
+  if (!parts.length) {
+    return "";
+  }
+  if (parts.length === 1) {
+    return parts[0].slice(0, limit);
+  }
+
+  const last = parts[parts.length - 1];
+  const initials = parts.slice(0, -1).map((part) => `${part[0]}.`).join(" ");
+  const abbreviated = `${initials} ${last}`.trim();
+  if (abbreviated.length <= limit) {
+    return abbreviated;
+  }
+
+  const firstInitial = `${parts[0][0]}.`;
+  const remaining = Math.max(0, limit - firstInitial.length - 1);
+  return `${firstInitial} ${last.slice(0, remaining)}`.trim();
+}
+
+function formatPesPlayerName(value, limit) {
+  return abbreviateName(cleanPlayerName(value), limit);
+}
+
+function getShirtNumberValue(value) {
+  const numericValue = Number.parseInt(String(value ?? "").replace(/\D/g, ""), 10);
+  if (!Number.isFinite(numericValue)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(99, numericValue));
+}
+
+function getAgeValue(value) {
+  const numericValue = Number.parseInt(String(value ?? "").replace(/\D/g, ""), 10);
+  if (!Number.isFinite(numericValue)) {
+    return 15;
+  }
+  return Math.max(15, Math.min(60, numericValue));
+}
+
+function getHeightValue(value) {
+  const normalized = String(value ?? "").replace(",", ".");
+  const decimalMatch = normalized.match(/(\d+(?:\.\d+)?)\s*m/i);
+  if (decimalMatch) {
+    return Math.max(120, Math.min(230, Math.round(Number.parseFloat(decimalMatch[1]) * 100)));
+  }
+
+  const numericValue = Number.parseInt(normalized.replace(/\D/g, ""), 10);
+  if (!Number.isFinite(numericValue)) {
+    return 180;
+  }
+  return Math.max(120, Math.min(230, numericValue));
+}
+
+function getPesNationalityCode(country) {
+  const normalized = normalizeCountryName(country);
+  if (!normalized) {
+    return null;
+  }
+  if (PES_NATIONALITY_CODE_OVERRIDES[normalized] !== undefined) {
+    return PES_NATIONALITY_CODE_OVERRIDES[normalized];
+  }
+  const index = PES_NATIONALITIES.findIndex((item) => normalizeCountryName(item) === normalized);
+  return index >= 0 ? index + 1 : null;
+}
+
+function getFirstPesNationality(nationalities = []) {
+  return getPesNationalityName(nationalities[0] || "");
+}
+
+function getCountryOptions(selectedValue) {
+  const selected = normalizeCountryName(selectedValue);
+  return [`<option value="">Selecione</option>`, ...PES_NATIONALITIES.map((country) => {
+    const normalized = normalizeCountryName(country);
+    const isSelected = normalized === selected ? "selected" : "";
+    return `<option value="${escapeHtml(country)}" ${isSelected}>${escapeHtml(country)}</option>`;
+  })].join("");
+}
+
+function getPositionOptions(selectedCode) {
+  return Object.values(PES_POSITION_MAP).map((position) => {
+    const isSelected = position.code === selectedCode ? "selected" : "";
+    return `<option value="${escapeHtml(position.code)}" ${isSelected}>${escapeHtml(position.code)}</option>`;
+  }).join("");
+}
+
+function getPositionValue(code) {
+  const found = Object.entries(PES_POSITION_MAP).find(([, position]) => position.code === code);
+  return found ? Number(found[0]) : 0;
+}
+
+function normalizeFootCode(value) {
+  const normalized = normalizePositionText(value);
+  if (/left|esquer|canhot/.test(normalized)) {
+    return "L";
+  }
+  if (/right|direit|destro/.test(normalized)) {
+    return "R";
+  }
+  return "";
+}
+
+function getFootOptions(selectedCode) {
+  return Object.entries(STRONG_FOOT_MAP).map(([code, label]) => {
+    const isSelected = code === selectedCode ? "selected" : "";
+    return `<option value="${escapeHtml(code)}" ${isSelected}>${escapeHtml(label)}</option>`;
+  }).join("");
+}
+
+function getSelectedPlayers() {
+  return state.selectedPlayerKeys
+    .map((key) => state.transfermarktPlayers.find((player) => getPlayerKey(player) === key))
+    .filter(Boolean);
+}
+
+function describeTransfermarktPlayer(player) {
+  const nationality = getNationalityValidation(player);
+  return [
+    player.position || player.detailedPosition,
+    player.age ? `${player.age} anos` : "",
+    player.foot ? `pe ${player.foot}` : "",
+    player.height,
+    (player.nationalities || []).join(", "),
+    `PES: ${nationality.label}`,
+  ].filter(Boolean).join(" | ");
+}
+
+function getSlotGroupClass(slot) {
+  if (slot <= 11) {
+    return "group-starter";
+  }
+  if (slot <= 18) {
+    return "group-bench";
+  }
+  return "group-extra";
+}
+
+function getTransfermarktPesPosition(player) {
+  const sourcePosition = normalizePositionText(player.position || player.detailedPosition || "");
+  const positionMap = [
+    [/^gol$|goleiro|goalkeeper/, "GK"],
+    [/^zag$|zagueiro|defensor.*zagueiro|centre.?back|center.?back/, "CB"],
+    [/^le$|lateral esquerdo|left.?back/, "LB"],
+    [/^ld$|lateral direito|right.?back/, "RB"],
+    [/^vol$|volante|meio campo defensivo|defensive midfield/, "DMF"],
+    [/meio campo central|meia central|central midfield|meio campo$/, "CMF"],
+    [/^mei$|meia esquerda|left midfield/, "LM"],
+    [/meia direita|right midfield/, "RM"],
+    [/armador|meia ofensivo|attacking midfield/, "AMF"],
+    [/^pe$|ponta esquerda|left winger/, "LWF"],
+    [/^pd$|ponta direita|right winger/, "RWF"],
+    [/segundo atacante|second striker/, "SS"],
+    [/^ca$|centroavante|atacante|centre.?forward|center.?forward/, "CF"],
+  ];
+
+  const match = positionMap.find(([pattern]) => pattern.test(sourcePosition));
+  return match ? match[1] : "";
+}
+
+function normalizePositionText(value) {
+  return cleanText(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function bindDynamicControls() {
+  document.querySelectorAll("[data-select-player]").forEach((checkbox) => {
+    checkbox.addEventListener("change", () => {
+      const key = checkbox.dataset.selectPlayer;
+
+      if (checkbox.checked) {
+        if (state.selectedPlayerKeys.length >= PES_PLAYER_COUNT) {
+          checkbox.checked = false;
+          setStatus("Selecao limitada a 25 jogadores.", true);
+          return;
+        }
+        state.selectedPlayerKeys.push(key);
+      } else {
+        state.selectedPlayerKeys = state.selectedPlayerKeys.filter((item) => item !== key);
+        state.mappings = state.mappings.map((mapping) => mapping.playerKey === key ? { ...mapping, playerKey: "" } : mapping);
+      }
+
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-map-slot]").forEach((select) => {
+    select.addEventListener("change", () => {
+      const slot = Number(select.dataset.mapSlot);
+      setMapping(slot, select.value);
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-write-team]").forEach((control) => {
+    control.addEventListener("input", () => {
+      const limit = Number(control.getAttribute("maxlength")) || 0;
+      const value = control.tagName === "INPUT" ? toPesUpperInput(control.value, limit || control.value.length) : control.value;
+      if (control.tagName === "INPUT" && control.value !== value) {
+        control.value = value;
+      }
+      state.writeDraft.team[control.dataset.writeTeam] = value;
+    });
+    control.addEventListener("change", () => {
+      state.writeDraft.team[control.dataset.writeTeam] = control.tagName === "INPUT" ? toPesUpper(control.value) : control.value;
+    });
+  });
+
+  document.querySelectorAll("[data-write-player]").forEach((control) => {
+    control.addEventListener("input", () => {
+      const slot = control.dataset.writePlayer;
+      const limit = Number(control.getAttribute("maxlength")) || 0;
+      const value = control.tagName === "INPUT" && control.type !== "number" ? toPesUpperInput(control.value, limit || control.value.length) : control.value;
+      if (control.tagName === "INPUT" && control.type !== "number" && control.value !== value) {
+        control.value = value;
+      }
+      state.writeDraft.players[slot] = {
+        ...(state.writeDraft.players[slot] || {}),
+        [control.dataset.writeField]: value,
+      };
+    });
+    control.addEventListener("change", () => {
+      const slot = control.dataset.writePlayer;
+      const field = control.dataset.writeField;
+      const limit = Number(control.getAttribute("maxlength")) || control.value.length;
+      const textValue = field === "name" || field === "shirtName"
+        ? formatPesPlayerName(control.value, limit)
+        : toPesUpper(control.value);
+      if (control.tagName === "INPUT" && control.type !== "number" && control.value !== textValue) {
+        control.value = textValue;
+      }
+      state.writeDraft.players[slot] = {
+        ...(state.writeDraft.players[slot] || {}),
+        [field]: control.tagName === "INPUT" && control.type !== "number" ? textValue : control.value,
+      };
+    });
+  });
+}
+
+function setMapping(slot, playerKey) {
+  const existing = state.mappings.find((mapping) => mapping.slot === slot);
+  if (existing) {
+    existing.playerKey = playerKey;
+    return;
+  }
+  state.mappings.push({ slot, playerKey });
+}
+
+function selectFirst25Players() {
+  state.selectedPlayerKeys = state.transfermarktPlayers.slice(0, PES_PLAYER_COUNT).map(getPlayerKey);
+  mapByOrder();
+  render();
+  setStatus(`${state.selectedPlayerKeys.length} jogadores selecionados.`);
+}
+
+function clearSelection() {
+  state.selectedPlayerKeys = [];
+  state.mappings = [];
+  render();
+  setStatus("Selecao de jogadores limpa.");
+}
+
+function mapByOrder() {
+  const selectedPlayers = getSelectedPlayers();
+  state.mappings = state.binPlayers.slice(0, PES_PLAYER_COUNT).map((binPlayer, index) => ({
+    slot: binPlayer.slot,
+    playerKey: getPlayerKey(selectedPlayers[index] || {}),
+  }));
+}
+
+function getMappedPlayerForSlot(slot) {
+  const mapping = state.mappings.find((item) => item.slot === slot);
+  if (!mapping?.playerKey) {
+    return null;
+  }
+  return state.transfermarktPlayers.find((player) => getPlayerKey(player) === mapping.playerKey) || null;
+}
+
+function getWritePlayerDefaults(binPlayer) {
+  const mappedPlayer = getMappedPlayerForSlot(binPlayer.slot);
+  const sourceName = mappedPlayer?.name || binPlayer.name || "";
+  const formattedName = formatPesPlayerName(sourceName, FIELD_LIMITS.playerName);
+  return {
+    name: formattedName,
+    shirtName: formatPesPlayerName(formattedName, FIELD_LIMITS.playerShirtName),
+    position: getTransfermarktPesPosition(mappedPlayer || {}) || binPlayer.position.code || "GK",
+    foot: normalizeFootCode(mappedPlayer?.foot || "") || binPlayer.strongFoot?.code || "R",
+    age: mappedPlayer?.age || "",
+    height: mappedPlayer?.height ? String(getHeightValue(mappedPlayer.height)) : binPlayer.height || "",
+    country: getFirstPesNationality(mappedPlayer?.nationalities || []),
+    shirtNumber: mappedPlayer?.shirtNumber || binPlayer.shirtNumber || "",
+  };
+}
+
+function getWritePlayerValue(slot, field, fallback) {
+  return state.writeDraft.players[slot]?.[field] ?? fallback ?? "";
+}
+
+function getCleanWritePlayerText(slot, field, fallback, limit) {
+  return formatPesPlayerName(getWritePlayerValue(slot, field, fallback), limit);
+}
+
+function getPreferredTeamName() {
+  const byMatch = state.transfermarktPlayers.find((player) => player.teamName)?.teamName;
+  const bySquad = state.clubPages.find((page) => page.type === "Plantel")?.name;
+  return byMatch || bySquad || "";
+}
+
+function getPreferredManager() {
+  return state.staff[0] || {};
+}
+
+function renderWritePanel() {
+  const manager = getPreferredManager();
+  const teamName = state.writeDraft.team.teamName ?? fitText(getPreferredTeamName(), FIELD_LIMITS.teamName);
+  const teamShortName = state.writeDraft.team.teamShortName ?? fitText(getPreferredTeamName(), FIELD_LIMITS.teamShortName);
+  const stadiumName = state.writeDraft.team.stadiumName ?? "";
+  const teamCountry = state.writeDraft.team.teamCountry ?? "";
+  const managerName = state.writeDraft.team.managerName ?? fitText(manager.name || "", FIELD_LIMITS.managerName);
+  const managerCountry = state.writeDraft.team.managerCountry ?? getPesNationalityName(manager.nationality || "");
+
+  elements.teamNameInput.value = teamName;
+  elements.teamShortNameInput.value = teamShortName;
+  elements.stadiumNameInput.value = stadiumName;
+  elements.managerNameInput.value = managerName;
+  elements.teamCountrySelect.innerHTML = getCountryOptions(teamCountry);
+  elements.managerCountrySelect.innerHTML = getCountryOptions(managerCountry);
+
+  elements.saveEditedFileButton.disabled = !state.binBytes || !state.binPlayers.length;
+  elements.writePlayersBody.innerHTML = state.binPlayers.map((binPlayer) => {
+    const defaults = getWritePlayerDefaults(binPlayer);
+    const name = getCleanWritePlayerText(binPlayer.slot, "name", defaults.name, FIELD_LIMITS.playerName);
+    const shirtName = getCleanWritePlayerText(binPlayer.slot, "shirtName", defaults.shirtName || name, FIELD_LIMITS.playerShirtName);
+    const position = getWritePlayerValue(binPlayer.slot, "position", defaults.position);
+    const foot = getWritePlayerValue(binPlayer.slot, "foot", defaults.foot);
+    const age = getWritePlayerValue(binPlayer.slot, "age", defaults.age);
+    const height = getWritePlayerValue(binPlayer.slot, "height", defaults.height);
+    const country = getWritePlayerValue(binPlayer.slot, "country", defaults.country);
+    const shirtNumber = getWritePlayerValue(binPlayer.slot, "shirtNumber", defaults.shirtNumber);
+
+    return `
+      <tr class="${getSlotGroupClass(binPlayer.slot)}">
+        <td>${binPlayer.slot}</td>
+        <td><input data-write-player="${binPlayer.slot}" data-write-field="name" maxlength="${FIELD_LIMITS.playerName}" value="${escapeHtml(name)}"></td>
+        <td><input data-write-player="${binPlayer.slot}" data-write-field="shirtName" maxlength="${FIELD_LIMITS.playerShirtName}" value="${escapeHtml(shirtName)}"></td>
+        <td><select data-write-player="${binPlayer.slot}" data-write-field="position">${getPositionOptions(position)}</select></td>
+        <td><select data-write-player="${binPlayer.slot}" data-write-field="foot">${getFootOptions(foot)}</select></td>
+        <td><input data-write-player="${binPlayer.slot}" data-write-field="age" type="number" min="15" max="60" value="${escapeHtml(age)}"></td>
+        <td><input data-write-player="${binPlayer.slot}" data-write-field="height" type="number" min="120" max="230" value="${escapeHtml(height)}"></td>
+        <td><select data-write-player="${binPlayer.slot}" data-write-field="country">${getCountryOptions(country)}</select></td>
+        <td><input data-write-player="${binPlayer.slot}" data-write-field="shirtNumber" type="number" min="0" max="99" value="${escapeHtml(shirtNumber)}"></td>
+      </tr>
+    `;
+  }).join("") || `<tr><td colspan="9" class="muted">Carregue o arquivo PES e monte a correspondencia para preparar a gravacao.</td></tr>`;
+
+  const mappedCount = state.mappings.filter((mapping) => mapping.playerKey).length;
+  elements.writeStatus.textContent = `${mappedCount}/25 jogadores mapeados para gravacao. Limites: equipe ${FIELD_LIMITS.teamName}, abreviacao ${FIELD_LIMITS.teamShortName}, estadio ${FIELD_LIMITS.stadiumName}, tecnico ${FIELD_LIMITS.managerName}, jogador ${FIELD_LIMITS.playerName}, nome na camisa ${FIELD_LIMITS.playerShirtName}.`;
+}
+
+function saveEditedFile() {
+  if (!state.binBytes) {
+    setStatus("Carregue o arquivo PES antes de gravar.", true);
+    return;
+  }
+
+  const edited = new Uint8Array(state.binBytes);
+  let writtenPlayers = 0;
+  let writtenCountries = 0;
+
+  writeAscii(edited, TEAM_NAME_OFFSET, FIELD_LIMITS.teamName + 1, state.writeDraft.team.teamName ?? elements.teamNameInput.value);
+  writeAscii(edited, TEAM_SHORT_NAME_OFFSET, FIELD_LIMITS.teamShortName + 1, state.writeDraft.team.teamShortName ?? elements.teamShortNameInput.value);
+  writeAscii(edited, TEAM_STADIUM_NAME_OFFSET, FIELD_LIMITS.stadiumName + 1, state.writeDraft.team.stadiumName ?? elements.stadiumNameInput.value);
+  writeAscii(edited, MANAGER_NAME_OFFSET, FIELD_LIMITS.managerName + 1, state.writeDraft.team.managerName ?? elements.managerNameInput.value);
+
+  const teamCountryCode = getPesNationalityCode(state.writeDraft.team.teamCountry ?? elements.teamCountrySelect.value);
+  if (teamCountryCode !== null) {
+    writeUint16(edited, TEAM_COUNTRY_OFFSET, teamCountryCode);
+  }
+
+  const managerCountryCode = getPesNationalityCode(state.writeDraft.team.managerCountry ?? elements.managerCountrySelect.value);
+  if (managerCountryCode !== null) {
+    writeUint16(edited, MANAGER_COUNTRY_OFFSET, managerCountryCode);
+  }
+
+  state.binPlayers.forEach((binPlayer) => {
+    const base = PES_PLAYER_START + (binPlayer.slot - 1) * PES_PLAYER_SIZE;
+    if (base + PES_PLAYER_SIZE > edited.length) {
+      return;
+    }
+
+    const defaults = getWritePlayerDefaults(binPlayer);
+    const name = formatPesPlayerName(getWritePlayerValue(binPlayer.slot, "name", defaults.name), FIELD_LIMITS.playerName);
+    const shirtName = formatPesPlayerName(getWritePlayerValue(binPlayer.slot, "shirtName", defaults.shirtName) || name, FIELD_LIMITS.playerShirtName);
+    const position = getWritePlayerValue(binPlayer.slot, "position", defaults.position);
+    const foot = getWritePlayerValue(binPlayer.slot, "foot", defaults.foot);
+    const shirtNumber = getShirtNumberValue(getWritePlayerValue(binPlayer.slot, "shirtNumber", defaults.shirtNumber));
+    const age = getAgeValue(getWritePlayerValue(binPlayer.slot, "age", defaults.age));
+    const height = getHeightValue(getWritePlayerValue(binPlayer.slot, "height", defaults.height));
+    const countryCode = getPesNationalityCode(getWritePlayerValue(binPlayer.slot, "country", defaults.country));
+
+    writeAscii(edited, base + 0x17, 0x2e, name);
+    writeAscii(edited, base + 0x45, 0x13, shirtName);
+    writeBitField(edited, base, 38, 4, getPositionValue(position));
+    writeBitField(edited, base, STRONG_FOOT_BIT, 1, foot === "L" ? 1 : 0);
+    writeBitField(edited, base, PLAYER_AGE_BIT, 6, age);
+    edited[base + PLAYER_HEIGHT_OFFSET] = height;
+    if (countryCode !== null) {
+      writeUint16(edited, base + PLAYER_COUNTRY_OFFSET, countryCode);
+      writtenCountries += 1;
+    }
+    edited[PES_SHIRT_NUMBERS_OFFSET + (binPlayer.slot - 1)] = shirtNumber;
+    writtenPlayers += 1;
+  });
+
+  const blob = new Blob([edited], { type: "application/octet-stream" });
+  const link = document.createElement("a");
+  const baseName = state.binFileName.replace(/\.[^.]+$/, "");
+  link.href = URL.createObjectURL(blob);
+  link.download = `${baseName}_editado.bin`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(link.href);
+
+  setStatus(`Arquivo editado gerado.\nJogadores gravados: ${writtenPlayers}\nPaises de jogadores gravados: ${writtenCountries}\nCampos gravados nesta versao: equipe, abreviacao, estadio, tecnico, pais da equipe, pais do tecnico, nome, nome na camisa, posicao, pe forte, idade, altura, pais do jogador e numero da camisa.`);
+}
+
+function render() {
+  elements.clubCount.textContent = state.clubPages.length;
+  elements.playerCount.textContent = state.transfermarktPlayers.length;
+  elements.binPlayerCount.textContent = state.binPlayers.length;
+  elements.issueCount.textContent = state.issues.length;
+
+  const clubInfoLines = [
+    ...state.clubPages.map((item) => `<span class="pill">${escapeHtml(item.type)}</span> ${escapeHtml([item.name, item.season && `Temporada ${item.season}`, item.clubId && `ID ${item.clubId}`].filter(Boolean).join(" - "))}`),
+    ...state.staff.map((item) => `<span class="pill">Equipe técnica</span> ${escapeHtml([item.role, item.name, item.nationality && `Nac. ${item.nationality}`, item.teamName || item.clubName, item.trainerId && `ID ${item.trainerId}`].filter(Boolean).join(" - "))}`),
+  ];
+  elements.clubInfo.innerHTML = clubInfoLines.length
+    ? clubInfoLines.join("<br>")
+    : "Nenhuma informação carregada.";
+
+  elements.playersBody.innerHTML = state.transfermarktPlayers.map((player) => {
+    const nationality = getNationalityValidation(player);
+    return `
+      <tr>
+        <td>${escapeHtml(player.shirtNumber || "")}</td>
+        <td>${escapeHtml(player.name || "")}${player.fullName ? `<br><span class="muted">${escapeHtml(player.fullName)}</span>` : ""}</td>
+        <td>${escapeHtml(player.position || player.detailedPosition || "")}</td>
+        <td>${escapeHtml(player.age || "")}${player.birthDate ? `<br><span class="muted">${escapeHtml(player.birthDate)}</span>` : ""}</td>
+        <td>${escapeHtml((player.nationalities || []).join(", "))}</td>
+        <td><span class="badge ${nationality.warning ? "warning" : ""}">${escapeHtml(nationality.label)}</span></td>
+        <td>${escapeHtml(player.foot || "")}</td>
+        <td>${escapeHtml(player.height || "")}</td>
+        <td>${escapeHtml(player.transfermarktId || "")}${player.profileUrl ? `<br><span class="muted">${escapeHtml(player.profileUrl)}</span>` : ""}</td>
+        <td>${escapeHtml((player.sources || []).join(", "))}</td>
+      </tr>
+    `;
+  }).join("") || `<tr><td colspan="10" class="muted">Nenhum jogador do Transfermarkt carregado.</td></tr>`;
+
+  const selectedPlayers = getSelectedPlayers();
+  elements.selectionStatus.textContent = `${selectedPlayers.length}/25 selecionados`;
+  elements.selectionBody.innerHTML = state.transfermarktPlayers.map((player) => {
+    const key = getPlayerKey(player);
+    const checked = state.selectedPlayerKeys.includes(key) ? "checked" : "";
+    const nationality = getNationalityValidation(player);
+    return `
+      <tr>
+        <td class="check-cell"><input type="checkbox" data-select-player="${escapeHtml(key)}" ${checked}></td>
+        <td>${escapeHtml(player.shirtNumber || "")}</td>
+        <td>${escapeHtml(player.name || "")}${player.fullName ? `<br><span class="muted">${escapeHtml(player.fullName)}</span>` : ""}</td>
+        <td>${escapeHtml(player.position || player.detailedPosition || "")}</td>
+        <td>${escapeHtml(player.age || "")}</td>
+        <td><span class="badge ${nationality.warning ? "warning" : ""}">${escapeHtml(nationality.label)}</span></td>
+        <td>${escapeHtml(player.foot || "")}</td>
+        <td>${escapeHtml(player.height || "")}</td>
+        <td>${escapeHtml((player.sources || []).join(", "))}</td>
+      </tr>
+    `;
+  }).join("") || `<tr><td colspan="9" class="muted">Carregue jogadores do Transfermarkt para selecionar os 25.</td></tr>`;
+
+  const mappedCount = state.mappings.filter((mapping) => mapping.playerKey).length;
+  elements.mappingStatus.textContent = `${mappedCount}/25 slots mapeados`;
+  elements.mappingBody.innerHTML = state.binPlayers.map((binPlayer, index) => {
+    const mapping = state.mappings.find((item) => item.slot === binPlayer.slot);
+    const selectedOptions = selectedPlayers.map((player) => {
+      const key = getPlayerKey(player);
+      const selected = mapping?.playerKey === key ? "selected" : "";
+      const optionLabel = [
+        player.shirtNumber ? `#${player.shirtNumber}` : "-",
+        getTransfermarktPesPosition(player) || "-",
+        player.name,
+      ].join(" - ");
+      return `<option value="${escapeHtml(key)}" ${selected}>${escapeHtml(optionLabel)}</option>`;
+    }).join("");
+    const mappedPlayer = selectedPlayers.find((player) => getPlayerKey(player) === mapping?.playerKey);
+
+    return `
+      <tr class="${getSlotGroupClass(binPlayer.slot)}">
+        <td>${binPlayer.slot}</td>
+        <td>${escapeHtml(binPlayer.name)}<br><span class="muted">#${escapeHtml(binPlayer.shirtNumber || "0")} | ${escapeHtml(binPlayer.shirtName)} | ID ${binPlayer.internalId}</span></td>
+        <td>${escapeHtml(binPlayer.position.label)}</td>
+        <td>${escapeHtml(binPlayer.strongFoot.label)}</td>
+        <td>
+          <select class="slot-select" data-map-slot="${binPlayer.slot}">
+            <option value="">Sem jogador selecionado</option>
+            ${selectedOptions}
+          </select>
+        </td>
+        <td class="compact">${mappedPlayer ? escapeHtml(describeTransfermarktPlayer(mappedPlayer)) : ""}</td>
+      </tr>
+    `;
+  }).join("") || `<tr><td colspan="6" class="muted">Carregue o arquivo PES para ver os 25 slots.</td></tr>`;
+
+  elements.binBody.innerHTML = state.binPlayers.map((player) => `
+    <tr>
+      <td>${player.slot}</td>
+      <td>${escapeHtml(player.name)}</td>
+      <td>${escapeHtml(player.shirtName)}</td>
+      <td>${escapeHtml(player.shirtNumber || "0")}</td>
+      <td>${escapeHtml(player.position.label)}</td>
+      <td>${escapeHtml(player.strongFoot.label)}</td>
+      <td>${player.internalId}</td>
+      <td>${player.offset}</td>
+    </tr>
+  `).join("") || `<tr><td colspan="8" class="muted">Nenhum arquivo PES carregado.</td></tr>`;
+
+  elements.eventsBody.innerHTML = state.events.map((event) => `
+    <tr>
+      <td>${escapeHtml(event.type)}</td>
+      <td>${escapeHtml(event.player)}</td>
+      <td>${escapeHtml(event.detail)}</td>
+      <td>${escapeHtml(event.team)}</td>
+    </tr>
+  `).join("") || `<tr><td colspan="4" class="muted">Nenhum evento de jogo carregado.</td></tr>`;
+
+  elements.issuesBody.innerHTML = state.issues.map((issue) => `
+    <tr>
+      <td>${escapeHtml(issue.field)}</td>
+      <td>${escapeHtml(issue.reason)}</td>
+      <td>${escapeHtml(issue.source)}</td>
+    </tr>
+  `).join("") || `<tr><td colspan="3" class="muted">Nenhum alerta no momento.</td></tr>`;
+
+  renderWritePanel();
+  bindDynamicControls();
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+async function loadTransfermarktUrl() {
+  const url = elements.urlInput.value.trim();
+  if (!url) {
+    setStatus("Informe uma URL do Transfermarkt.", true);
+    return;
+  }
+
+  elements.loadUrlButton.disabled = true;
+  setStatus("Lendo URL do Transfermarkt...");
+
+  try {
+    const response = await fetch(`/fetch?url=${encodeURIComponent(url)}`);
+    const payload = await response.json();
+
+    if (!response.ok || !payload.ok) {
+      throw new Error(payload.error || "Falha ao buscar a URL.");
+    }
+
+    parseTransfermarktHtml(payload.html, url);
+    setStatus("URL lida com sucesso.");
+  } catch (error) {
+    addIssue("URL do Transfermarkt", error.message, url);
+    render();
+    setStatus(`Nao consegui ler a URL.\nMotivo provavel: ${error.message}\nSugestao: salve a pagina como HTML e carregue no campo de HTML salvo.`, true);
+  } finally {
+    elements.loadUrlButton.disabled = false;
+  }
+}
+
+async function fetchTransfermarktHtml(url) {
+  const response = await fetch(`/fetch?url=${encodeURIComponent(url)}`);
+  const payload = await response.json();
+
+  if (!response.ok || !payload.ok) {
+    throw new Error(payload.error || "Falha ao buscar a URL.");
+  }
+
+  return payload.html;
+}
+
+async function enrichIndividualPlayers() {
+  const playersWithProfiles = state.transfermarktPlayers.filter((player) => player.profileUrl);
+
+  if (!playersWithProfiles.length) {
+    setStatus("Nenhum link individual de jogador encontrado para buscar.", true);
+    return;
+  }
+
+  elements.enrichButton.disabled = true;
+  let successCount = 0;
+  let failCount = 0;
+
+  for (let index = 0; index < playersWithProfiles.length; index += 1) {
+    const player = playersWithProfiles[index];
+    elements.enrichStatus.textContent = `${index + 1}/${playersWithProfiles.length}: ${player.name}`;
+
+    try {
+      const html = await fetchTransfermarktHtml(player.profileUrl);
+      parsePlayerPage(html, player.profileUrl);
+      successCount += 1;
+    } catch (error) {
+      failCount += 1;
+      addIssue(`Perfil individual de ${player.name}`, error.message, player.profileUrl);
+      render();
+    }
+  }
+
+  elements.enrichButton.disabled = false;
+  elements.enrichStatus.textContent = `${successCount} perfis lidos, ${failCount} falhas.`;
+  setStatus(`Busca individual concluida.\nPerfis lidos: ${successCount}\nFalhas: ${failCount}${failCount ? "\nVeja a aba Alertas para detalhes." : ""}`, failCount > 0);
+  render();
+}
+
+elements.binFile.addEventListener("change", async () => {
+  const [file] = elements.binFile.files;
+  if (!file) return;
+  state.binFileName = file.name || "Editado.bin";
+  parsePesBin(await file.arrayBuffer());
+});
+
+elements.htmlFile.addEventListener("change", async () => {
+  const [file] = elements.htmlFile.files;
+  if (!file) return;
+  const html = await file.text();
+  parseTransfermarktHtml(html, file.name);
+  setStatus(`HTML lido: ${file.name}`);
+});
+
+elements.loadUrlButton.addEventListener("click", loadTransfermarktUrl);
+elements.enrichButton.addEventListener("click", enrichIndividualPlayers);
+elements.selectFirst25Button.addEventListener("click", selectFirst25Players);
+elements.clearSelectionButton.addEventListener("click", clearSelection);
+elements.mapByOrderButton.addEventListener("click", () => {
+  mapByOrder();
+  render();
+  setStatus("Correspondencia por ordem atualizada.");
+});
+elements.saveEditedFileButton.addEventListener("click", saveEditedFile);
+
+elements.clearButton.addEventListener("click", () => {
+  state.transfermarktPlayers = [];
+  state.binPlayers = [];
+  state.binBytes = null;
+  state.binFileName = "Editado.bin";
+  state.events = [];
+  state.issues = [];
+  state.clubPages = [];
+  state.staff = [];
+  state.selectedPlayerKeys = [];
+  state.mappings = [];
+  state.writeDraft = { team: {}, players: {} };
+  elements.binFile.value = "";
+  elements.htmlFile.value = "";
+  elements.urlInput.value = "";
+  elements.enrichStatus.textContent = "Use depois de carregar uma pagina de jogo ou plantel.";
+  render();
+  setStatus("Dados limpos.");
+});
+
+document.querySelectorAll(".tab").forEach((tab) => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach((item) => item.classList.remove("active"));
+    document.querySelectorAll(".panel").forEach((item) => item.classList.remove("active"));
+    tab.classList.add("active");
+    document.querySelector(`#${tab.dataset.panel}`).classList.add("active");
+  });
+});
+
+render();
